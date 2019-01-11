@@ -23,18 +23,19 @@
 	           ]
 	         }
     	}</textarea>
-		<br>
+		<!--br-->
 		<button id="submitFreeInput" >Load</button>
 		<button id="mergeBtn">Merge</button>
 		<button id="drawLinesBtn">ReDraw</button>
 		<button id="LogLinesBtn">Log Lines</button>
+		<button id="Special">Special</button>
 	</body>
 
 	<script>
  		//54,55@0;;397,398@0
 		const $canvas = $("#myCanvas");
 		const canvas = $canvas[0];
-		const c = canvas.getContext("2d");
+		const c1 = canvas.getContext("2d");
 
 		const $canvas2 = $("#myCanvas2");
 		const canvas2 = $canvas2[0];
@@ -43,10 +44,196 @@
 		var lines = [];
 
 
-		c.fillStyle = "#ffffff";
-		c.fillRect(0, 0, canvas.width, canvas.height);
+		c1.fillStyle = "#ffffff";
+		c1.fillRect(0, 0, canvas.width, canvas.height);
 		c2.fillStyle = "#ffffff";
 		c2.fillRect(0, 0, canvas.width, canvas.height);
+
+		function Site(x, y)
+		{
+			this.x = x;
+			this.y = y;
+		}
+
+		function BeachTree()
+		{
+			this.root = null;
+		}
+
+		BeachTree.prototype.addSite = function(site)
+		{
+			if(!site instanceof Site)
+			{
+				throw "Invalid Argument, not of instance Site"
+			}
+			arch = new Arch(site);
+			if(root = null)
+			{
+				root = node;
+			}
+			else {
+				if(root instanceof Arch)
+				{
+					root = splitArch(root, arch);
+				}
+				else
+				{
+					root.addSite(arch);
+				}
+			}
+		}
+
+		function BeachNode(){}
+
+		function Breakpoint(leftArch, rightArch, isRightSide, edge)
+		{
+			if(!leftArch instanceof Arch || !rightArch instanceof Arch || isRightSide instanceof Boolean)
+			{
+				throw "Invalid argument, arches"
+			}
+			this.edge = edge;
+			this.tuple = [leftArch, rightArch];
+			this.leftNode = null;
+			this.rightNode = null;
+		}
+
+		function Arch(site)
+		{
+			this.site = site;
+		}
+
+		Breakpoint.prototype = Object.create(BeachNode.prototype);
+		Arch.prototype = Object.create(BeachNode.prototype);
+
+		Breakpoint.prototype.breakX = function(lineY)
+		{
+			let a = (this.tuple[0]).site.x;
+			let b = (this.tuple[0]).site.y;
+			let c = this.tuple[1].site.x;
+			let d = this.tuple[1].site.y;
+			let l = lineY;
+
+			let squarePart = Math.sqrt(Math.pow((2*c)/(2*d - 2*l) - (2*a)/(2*b - 2*l), 2) - 4*(1/(2*b - 2*l) - 1/(2*d - 2*l)) * (Math.pow(a,2)/(2*b - 2*l) + Math.pow(b,2)/(2*b - 2*l) - Math.pow(l, 2)/(2*b - 2*l) - Math.pow(c, 2)/(2*d - 2*l) - Math.pow(d, 2)/(2*d - 2*l) + Math.pow(l, 2)/(2*d - 2*l)));
+			let posX = (squarePart + (2*a)/(2*b - 2*l) - (2*c)/(2*d - 2*l))/(2*(1/(2*b - 2*l) - 1/(2*d - 2*l)));
+			let negX = (-squarePart + (2*a)/(2*b - 2*l) - (2*c)/(2*d - 2*l))/(2*(1/(2*b - 2*l) - 1/(2*d - 2*l)));
+
+			return[negX, posX];
+		}
+
+		Breakpoint.prototype.addSite = function(arch)
+		{
+
+		}
+
+		Site.prototype.getZeroX = function(line)
+		{
+			a = this.x;
+			b = this.y;
+			l = line;
+			squarePart = Math.sqrt((4*Math.pow(a,2))/Math.pow(2*b - 2*l,2) - (4*(Math.pow(a,2)/(2*b - 2*l) + Math.pow(b,2)/(2*b - 2*l) -Math.pow(l,2)/(2*b - 2*l)))/(2*b - 2*l));
+			posX = (1/2)*(2*b - 2*l)*((2*a)/(2*b - 2*l) + squarePart);
+			negX = (1/2)*(2*b - 2*l)*((2*a)/(2*b - 2*l) - squarePart);
+
+			return [negX, posX];
+		}
+
+		Site.prototype.getMidY = function (line)
+		{
+			a = this.x;
+			b = this.y;
+			x = a;
+			l = line;
+
+			return (1/(2*(b-l)))*(Math.pow(x,2)-2*a*x+Math.pow(a,2)+Math.pow(b,2)-Math.pow(l,2));
+		}
+
+		Site.prototype.getY = function (line, x)
+		{
+			a = this.x;
+			b = this.y;
+			l = line;
+
+			return (1/(2*(b-l)))*(Math.pow(x,2)-2*a*x+Math.pow(a,2)+Math.pow(b,2)-Math.pow(l,2));
+		}
+
+		$("#Special").click(function()
+		{
+
+			site1 = new Site(300, 100);
+			site2 = new Site(400, 200);
+			arch1 = new Arch(site1);
+			arch2 = new Arch(site2);
+			bp = new Breakpoint(arch1, arch2, true, null);
+
+			start = null;
+
+			totTime = 20000;
+
+			line = 100;
+
+			drawer = function(timestep){
+				if(!start) start = timestep;
+				tup1 = site1.getZeroX(line);
+				midY1 = site1.getMidY(line);
+				tup2 = site2.getZeroX(line);
+				midY2 = site2.getMidY(line);
+
+				cpx1 = 2 * site1.x - tup1[0]/2 - tup1[1]/2;
+				cpy1 = 2 * midY1;
+
+				cpx2 = 2 * site2.x - tup2[0]/2 - tup2[1]/2;
+				cpy2 = 2 * midY2;
+
+				intersect = bp.breakX(line);
+				b1 = [intersect[0], site1.getY(line, intersect[0])];
+				b2 = [intersect[1], site1.getY(line, intersect[1])];
+
+				c1.fillStyle = "#ffffff";
+				c1.fillRect(0, 0, canvas.width, canvas.height);
+
+				c1.lineStyle = "#0000ff";
+				c1.beginPath();
+				c1.moveTo(0, line);
+				c1.lineTo(canvas.width, line);
+				c1.stroke();
+
+				c1.lineStyle = "#000000";
+				c1.beginPath();
+				c1.moveTo(tup1[0], 0);
+				c1.quadraticCurveTo(cpx1, cpy1, tup1[1], 0);
+				c1.stroke();
+
+				c1.beginPath();
+				c1.moveTo(tup2[0], 0);
+				c1.quadraticCurveTo(cpx2, cpy2, tup2[1], 0);
+				c1.stroke();
+
+				c1.fillStyle = "#000000";
+
+				c1.beginPath();
+				c1.arc(site1.x, site1.y, 5, 0, 2 * Math.PI, false);
+				c1.fill();
+				c1.arc(site2.x, site2.y, 5, 0, 2 * Math.PI, false);
+				c1.fill();
+
+				c1.fillStyle = "#FF0000";
+
+				c1.beginPath();
+				c1.arc(b1[0], b1[1], 5, 0, 2 * Math.PI, false);
+				c1.fill();
+				c1.arc(b2[0], b2[1], 5, 0, 2 * Math.PI, false);
+				c1.fill();
+
+				timeDiff = timestep - start;
+				line = canvas.height * (timeDiff/totTime)
+				if(timeDiff < totTime)
+				{
+					window.requestAnimationFrame(drawer);
+				}
+			}
+			window.requestAnimationFrame(drawer);
+
+		});
 
 		function vertexEdge(startID, startEdge, endID, endEdge)
 		{
@@ -151,8 +338,8 @@
 
 		$("#submitFreeInput").click(function()
 		{
-			c.fillStyle = "#ffffff";
-			c.fillRect(0, 0, canvas.width, canvas.height);
+			c1.fillStyle = "#ffffff";
+			c1.fillRect(0, 0, canvas.width, canvas.height);
 
 			console.log("click");
 			try{
@@ -203,14 +390,14 @@
 						v2y = vertices[index[1]][1]- minY;
 
 
-						c.beginPath();
-						c.moveTo(v1x * widthCoef + widthBuff, v1y * heightCoef + heightBuff);
-						c.lineTo(v2x * widthCoef + widthBuff, v2y * heightCoef + heightBuff);
-						c.stroke();
+						c1.beginPath();
+						c1.moveTo(v1x * widthCoef + widthBuff, v1y * heightCoef + heightBuff);
+						c1.lineTo(v2x * widthCoef + widthBuff, v2y * heightCoef + heightBuff);
+						c1.stroke();
 					}
 					else if (index.length == 3)
 					{
-						c.fillStyle = "#ffb33a";
+						c1.fillStyle = "#ffb33a";
 						v1x = vertices[index[0]][0]- minX;
 						v1y = vertices[index[0]][1]- minY;
 						v2x = vertices[index[1]][0]- minX;
@@ -219,11 +406,11 @@
 						v3y = vertices[index[2]][1]- minY;
 
 
-						c.beginPath();
-						c.moveTo(v1x * widthCoef + widthBuff, v1y * heightCoef + heightBuff);
-						c.lineTo(v2x * widthCoef + widthBuff, v2y * heightCoef + heightBuff);
-						c.lineTo(v3x * widthCoef + widthBuff, v3y * heightCoef + heightBuff);
-						c.fill();
+						c1.beginPath();
+						c1.moveTo(v1x * widthCoef + widthBuff, v1y * heightCoef + heightBuff);
+						c1.lineTo(v2x * widthCoef + widthBuff, v2y * heightCoef + heightBuff);
+						c1.lineTo(v3x * widthCoef + widthBuff, v3y * heightCoef + heightBuff);
+						c1.fill();
 
 					}
 				}
