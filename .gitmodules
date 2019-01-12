@@ -1,0 +1,3 @@
+[submodule "js-priority-queue"]
+	path = js-priority-queue
+	url = git@github.com:adamhooper/js-priority-queue.git

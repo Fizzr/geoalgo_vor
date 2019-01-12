@@ -3,6 +3,13 @@
 	    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
 	</head>
 	<body bgcolor="#444444">
+		<button id="submitFreeInput" >Load</button>
+		<button id="mergeBtn">Merge</button>
+		<button id="drawLinesBtn">ReDraw</button>
+		<button id="LogLinesBtn">Log Lines</button>
+		<button id="Special">Special</button>
+		<button id="Fast">Fast</button>
+		<br>
 		<canvas id="myCanvas" width="800" height="800" style="border:1px solid #000000;"></canvas>
 		<canvas id="myCanvas2" width="800" height="800" style="border:1px solid #000000;"></canvas>
 		<br>
@@ -23,13 +30,10 @@
 	           ]
 	         }
     	}</textarea>
-		<!--br-->
-		<button id="submitFreeInput" >Load</button>
-		<button id="mergeBtn">Merge</button>
-		<button id="drawLinesBtn">ReDraw</button>
-		<button id="LogLinesBtn">Log Lines</button>
-		<button id="Special">Special</button>
 	</body>
+
+	<script src="js-priority-queue/priority-queue.js"></script>
+
 
 	<script>
  		//54,55@0;;397,398@0
@@ -41,6 +45,10 @@
 		const canvas2 = $canvas2[0];
 		const c2 = canvas2.getContext("2d");
 
+//Grabbing the "negative" X value will always give the appropriate sided X. Since the sites have a specified ordered in the tuple and the equation flipped upside down if sites are flipped.
+		const myIntersect = 0;
+		var queue = new PriorityQueue({ comparator: compareEvents });
+
 		var lines = [];
 
 
@@ -49,11 +57,32 @@
 		c2.fillStyle = "#ffffff";
 		c2.fillRect(0, 0, canvas.width, canvas.height);
 
+		function Edge (origin, twin)
+		{
+			this.origin = origin;
+			this.twin = twin;
+		}
+
 		function Site(x, y)
 		{
 			this.x = x;
 			this.y = y;
 		}
+
+		function CircleEvent(x,y, arch)
+		{
+			this.x = x;
+			this.y = y;
+			this.falseAlarm = false;
+			this.dissapearingArch = arch;
+
+		}
+
+		function compareEvents(a, b)
+		{
+			return a.y - b.y;
+		}
+
 
 		function BeachTree()
 		{
@@ -66,63 +95,242 @@
 			{
 				throw "Invalid Argument, not of instance Site"
 			}
-			arch = new Arch(site);
-			if(root = null)
+			let arch = new Arch(site);
+			if(this.root == null)
 			{
-				root = node;
+				this.root = arch;
 			}
 			else {
-				if(root instanceof Arch)
+				if(this.root instanceof Arch)
 				{
-					root = splitArch(root, arch);
+					this.root = splitArch(this.root, arch);
 				}
 				else
 				{
-					root.addSite(arch);
+					this.root.addSite(arch);
 				}
 			}
 		}
 
+		BeachTree.prototype.draw = function(line)
+		{
+			if(this.root != null)
+				this.root.draw(line);
+		}
+
 		function BeachNode(){}
 
-		function Breakpoint(leftArch, rightArch, isRightSide, edge)
+		function Breakpoint(leftArch, rightArch, leftChild, rightChild, isRightSide, edge)
 		{
-			if(!leftArch instanceof Arch || !rightArch instanceof Arch || isRightSide instanceof Boolean)
+			if(!leftArch instanceof Arch || !rightArch instanceof Arch || !isRightSide instanceof Boolean || !leftChild instanceof BeachNode || !rightChild instanceof BeachNode)
 			{
-				throw "Invalid argument, arches"
+				throw "Invalid argument"
 			}
 			this.edge = edge;
 			this.tuple = [leftArch, rightArch];
-			this.leftNode = null;
-			this.rightNode = null;
+			this.leftChild = leftChild;
+			this.rightChild = rightChild;
+			this.isRightSide = isRightSide;
 		}
 
 		function Arch(site)
 		{
 			this.site = site;
+			this.circleEvent = null;
+			this.before = null;
+			this.after = null;
 		}
 
 		Breakpoint.prototype = Object.create(BeachNode.prototype);
 		Arch.prototype = Object.create(BeachNode.prototype);
 
-		Breakpoint.prototype.breakX = function(lineY)
+		function findArchIntersect(leftSite, rightSite, line)
 		{
-			let a = (this.tuple[0]).site.x;
+			//console.log(leftSite, rightSite, line);
+			let a = leftSite.x;
+			let b = leftSite.y;
+			let c = rightSite.x;
+			let d = rightSite.y;
+			let l = line;
+
+			let squarePart = Math.sqrt(Math.pow((2*c)/(2*d - 2*l) - (2*a)/(2*b - 2*l), 2) - 4*(1/(2*b - 2*l) - 1/(2*d - 2*l)) * (Math.pow(a,2)/(2*b - 2*l) + Math.pow(b,2)/(2*b - 2*l) - Math.pow(l, 2)/(2*b - 2*l) - Math.pow(c, 2)/(2*d - 2*l) - Math.pow(d, 2)/(2*d - 2*l) + Math.pow(l, 2)/(2*d - 2*l)));
+			let posX = (squarePart + (2*a)/(2*b - 2*l) - (2*c)/(2*d - 2*l))/(2*(1/(2*b - 2*l) - 1/(2*d - 2*l)));
+			let negX = (-squarePart + (2*a)/(2*b - 2*l) - (2*c)/(2*d - 2*l))/(2*(1/(2*b - 2*l) - 1/(2*d - 2*l)));
+			console.log("a %d b %d c %d d %d l %f, pos %f, neg %f", a, b, c, d, l, posX, negX);
+			return[negX, posX];
+		}
+
+		Breakpoint.prototype.breakX = function(line)
+		{
+			return findArchIntersect(this.tuple[0].site, this.tuple[1].site, line);
+/*			let a = (this.tuple[0]).site.x;
 			let b = (this.tuple[0]).site.y;
 			let c = this.tuple[1].site.x;
 			let d = this.tuple[1].site.y;
-			let l = lineY;
+			let l = line;
 
 			let squarePart = Math.sqrt(Math.pow((2*c)/(2*d - 2*l) - (2*a)/(2*b - 2*l), 2) - 4*(1/(2*b - 2*l) - 1/(2*d - 2*l)) * (Math.pow(a,2)/(2*b - 2*l) + Math.pow(b,2)/(2*b - 2*l) - Math.pow(l, 2)/(2*b - 2*l) - Math.pow(c, 2)/(2*d - 2*l) - Math.pow(d, 2)/(2*d - 2*l) + Math.pow(l, 2)/(2*d - 2*l)));
 			let posX = (squarePart + (2*a)/(2*b - 2*l) - (2*c)/(2*d - 2*l))/(2*(1/(2*b - 2*l) - 1/(2*d - 2*l)));
 			let negX = (-squarePart + (2*a)/(2*b - 2*l) - (2*c)/(2*d - 2*l))/(2*(1/(2*b - 2*l) - 1/(2*d - 2*l)));
 
-			return[negX, posX];
+			return[negX, posX];*/
 		}
 
 		Breakpoint.prototype.addSite = function(arch)
 		{
+			let breakpointX = this.breakX(arch.site.y)[myIntersect]; //Grabbing the "negative" X value will always give the appropriate sided X. Since the sites have a specified ordered in the tuple the positive X will be on the left side in left side breakpoints, and vice versa for right.
+			let goingRight = arch.site.x > breakpointX;
+			let child = (goingRight? this.rightChild: this.leftChild);
+			if(child instanceof Arch)
+			{
+				newBreak = splitArch(child, arch);
+				if(goingRight) this.rightChild = newBreak;
+				else this.leftChild = newBreak;
+			}
+			else
+			{
+				child.addSite(arch);
+			}
+		}
 
+		Breakpoint.prototype.draw = function(line)
+		{
+			let intersect = this.breakX(line);
+			let index = (this.isRightSide? 1: 0);
+			let invIndex = (this.isRightSide? 0: 1);
+
+			let b = [intersect[myIntersect], this.tuple[0].site.getY(line, intersect[myIntersect])];
+
+			let startB = [this.tuple[invIndex].site.x, this.tuple[index].site.getY(this.tuple[invIndex].site.y, this.tuple[invIndex].site.x)];
+
+			c1.fillStyle = "#FF0000";
+
+			c1.beginPath();
+			c1.arc(b[0], b[1], 5, 0, 2 * Math.PI, false);
+			c1.fill();
+
+			c1.strokeStyle = "#ff0000";
+			c1.beginPath();
+			c1.moveTo(b[0], b[1]);
+			c1.lineTo(startB[0], startB[1]);
+			c1.stroke();
+
+			this.leftChild.draw(line);
+			this.rightChild.draw(line);
+		}
+
+		Arch.prototype.draw = function(line)
+		{
+			let tupX = this.site.getZeroX(line);
+			let midY = this.site.getMidY(line);
+
+			let cpx = 2 * this.site.x - tupX[0]/2 - tupX[1]/2;
+			let cpy = 2 * midY;
+
+			c1.strokeStyle = "#000000";
+
+			c1.beginPath();
+			c1.moveTo(tupX[0], 0);
+			c1.quadraticCurveTo(cpx, cpy, tupX[1], 0);
+			c1.stroke();
+
+		}
+
+		function findLineIntersect(leftSite, midSite, rightSite)
+		{
+			let v1 = [midSite.x - leftSite.x, midSite.y - leftSite.y];
+			let v2 = [rightSite.x - midSite.x, rightSite.y - midSite.y];
+
+			cross = v1[0]*v2[1] - v1[1]*v2[0];
+
+			if(cross >= 0)
+				return null; //Not right turn, not converging
+
+			let bigY = (leftSite.y > midSite.y? leftSite.y : midSite.y);
+			bigY = (bigY > rightSite.y? bigY : rightSite.y);
+
+			leftP1 = findArchIntersect(leftSite, midSite, bigY+1)[myIntersect];
+			leftP2 = findArchIntersect(leftSite, midSite, bigY+2)[myIntersect];
+
+			slopeLeft = 1/(leftP2-leftP1);
+			leftOffset = bigY+1 - slopeLeft*leftP1;
+
+			rightP1 = findArchIntersect(midSite, rightSite, bigY+1)[myIntersect];
+			rightP2 = findArchIntersect(midSite, rightSite, bigY+2)[myIntersect];
+
+			slopeRight = 1/(rightP2-rightP1);
+			rightOffset = bigY+1 - slopeRight+rightP1;
+
+			meetingX = (rightOffset - leftOffset)/(slopeLeft -slopeRight);
+			meetingY = leftOffset + slopeLeft*meetingX;
+
+			console.log("Left slope ", slopeLeft);
+			console.log("Left offset ", leftOffset);
+			console.log("Left X ", leftP1);
+
+			console.log("Right slope ", slopeRight);
+			console.log("Right offset ", rightOffset);
+			console.log("Right X ", rightP1);
+
+			console.log("meeting at ", meetingX, meetingY)
+
+			return [meetingX, meetingY];
+		}
+
+		function splitArch(oldArch, newArch)
+		{
+			if(oldArch.circleEvent != null)
+			{
+				oldArch.circleEvent.falseAlarm = true;
+				oldArch.circleEvent = null;
+			}
+			var e1 = new Edge(null, null);
+			var e2 = new Edge(null, e1);
+			e1.twin = e2;
+
+			let leftArch = oldArch;
+			let midArch = newArch;
+			let rightArch = new Arch(oldArch.site);
+
+			rightArch.before = midArch;
+			rightArch.after = leftArch.after;
+			if(rightArch.after != null)
+				rightArch.after.before = rightArch;
+
+			midArch.before = leftArch;
+			midArch.after = rightArch;
+
+			leftArch.after = midArch;
+
+			//detect circleEvent
+			let farLeftArch = leftArch.before;
+			let farRightArch = rightArch.after;
+
+			if(farLeftArch != null)
+			{
+				let meeting = findLineIntersect(farLeftArch.site, leftArch.site, midArch.site);
+				if (meeting != null)
+				{
+					let event = new CircleEvent(meeting[0], meeting[1], leftArch);
+					leftArch.circleEvent = event;
+					queue.queue(event);
+				}
+			}
+			if(farRightArch != null)
+			{
+				let meeting = findLineIntersect(midArch.site, rightArch.site, farRightArch.site);
+				if (meeting != null)
+				{
+					let event = new CircleEvent(meeting[0], meeting[1], rightArch);
+					rightArch.circleEvent = event;
+					queue.queue(event);
+				}
+			}
+
+
+			rightBP = new Breakpoint(midArch, rightArch, midArch, rightArch, true, e1);
+			leftBP = new Breakpoint(leftArch, midArch, leftArch, rightBP, false, e2);
+			return leftBP;
 		}
 
 		Site.prototype.getZeroX = function(line)
@@ -156,22 +364,101 @@
 			return (1/(2*(b-l)))*(Math.pow(x,2)-2*a*x+Math.pow(a,2)+Math.pow(b,2)-Math.pow(l,2));
 		}
 
-		$("#Special").click(function()
+		function voronoi(draw)
 		{
+			site1 = new Site(300, 200);
+			site2 = new Site(400, 400);
+			site3 = new Site(500, 450);
 
-			site1 = new Site(300, 100);
-			site2 = new Site(400, 200);
+			var sites = [site1, site2, site3];
+
+			queue.queue(site1);
+			queue.queue(site2);
+			queue.queue(site3);
+
 			arch1 = new Arch(site1);
 			arch2 = new Arch(site2);
-			bp = new Breakpoint(arch1, arch2, true, null);
+			bp = new Breakpoint(arch1, arch2, null, null, true, null);
 
-			start = null;
+			let start = null;
+			let tree = new BeachTree();
+			let totTime = 20000;
+			let restorePoint;
+			let line = 0;
 
-			totTime = 20000;
+			newDraw = function (timestep)
+			{
+				if(!start)
+				{
+					start = timestep;
 
-			line = 100;
+					c1.fillStyle = "#ffffff";
+					c1.fillRect(0, 0, canvas.width, canvas.height);
+					for(point of sites)
+					{
+						c1.fillStyle = "#000000";
 
-			drawer = function(timestep){
+						c1.beginPath();
+						c1.arc(point.x, point.y, 5, 0, 2 * Math.PI, false);
+						c1.fill();
+					}
+					restorePoint = c1.getImageData(0, 0, canvas.width, canvas.height);
+				}
+				if(queue.length > 0)
+				{
+					c1.putImageData(restorePoint, 0, 0);
+					while(queue.peek().y < line)
+					{
+						let event = queue.dequeue();
+						if(event instanceof Site)
+						{
+							tree.addSite(event);
+						}
+						else
+						{
+							c1.fillStyle = "#0000FF";
+
+							c1.beginPath();
+							c1.arc(event.x, event.y, 5, 0, 2 * Math.PI, false);
+							c1.fill();
+							restorePoint = c1.getImageData(0, 0, canvas.width, canvas.height);
+						}
+					}
+
+					// c1.fillStyle = "#ffffff";
+					// c1.fillRect(0, 0, canvas.width, canvas.height);
+					//
+					tree.draw(line);
+
+					c1.strokeStyle = "#ff0000";
+					c1.beginPath();
+					c1.moveTo(0, line);
+					c1.lineTo(canvas.width, line);
+					c1.stroke();
+
+					timeDiff = timestep - start;
+					line = canvas.height * (timeDiff/totTime)
+					//if(line > 220) return;
+					if(timeDiff < totTime)
+					{
+						window.requestAnimationFrame(newDraw);
+					}
+				}
+			};
+			if(draw)
+				window.requestAnimationFrame(newDraw);
+			else
+			{
+				while(queue.length > 0)
+				{
+					let event = queue.dequeue();
+					if(event instanceof Site)
+						tree.addSite(event);
+				}
+
+			}
+
+			/*drawer = function(timestep){
 				if(!start) start = timestep;
 				tup1 = site1.getZeroX(line);
 				midY1 = site1.getMidY(line);
@@ -191,13 +478,13 @@
 				c1.fillStyle = "#ffffff";
 				c1.fillRect(0, 0, canvas.width, canvas.height);
 
-				c1.lineStyle = "#0000ff";
+				c1.strokeStyle = "#0000ff";
 				c1.beginPath();
 				c1.moveTo(0, line);
 				c1.lineTo(canvas.width, line);
 				c1.stroke();
 
-				c1.lineStyle = "#000000";
+				c1.strokeStyle = "#000000";
 				c1.beginPath();
 				c1.moveTo(tup1[0], 0);
 				c1.quadraticCurveTo(cpx1, cpy1, tup1[1], 0);
@@ -231,8 +518,16 @@
 					window.requestAnimationFrame(drawer);
 				}
 			}
-			window.requestAnimationFrame(drawer);
+			*/
+			// window.requestAnimationFrame(drawer);
 
+		}
+
+		$("#Special").click(function(){
+			voronoi(true);
+		});
+		$("#Fast").click(function(){
+			voronoi(false);
 		});
 
 		function vertexEdge(startID, startEdge, endID, endEdge)
