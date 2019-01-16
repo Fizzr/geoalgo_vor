@@ -65,6 +65,8 @@
 		function Edge (origin, twin)
 		{
 			this.origin = origin;
+			this.originX = null;
+			this.originY = null;
 			this.twin = twin;
 		}
 
@@ -110,13 +112,115 @@
 			else {
 				if(this.root instanceof Arch)
 				{
-					this.root = splitArch(this.root, site);
+					this.root = splitArch(this.root, site, null);
 				}
 				else
 				{
 					this.root.addSite(site);
 				}
 			}
+		}
+
+		BeachTree.prototype.processCircle = function(circleEvent)
+		{
+			if(!this.root instanceof Breakpoint)
+			{
+				throw "Attempted to remove arch from BeachTree without breakpoints";
+				return;
+			}
+			let lastNode = null;
+			let currentNode = this.root;
+			let firstBP = null;
+			let sndBP = null;
+
+			let arch = circleEvent.dissapearingArch;
+			let leftArch = arch.before;
+			let rightArch = arch.after;
+
+			console.log("Arch %d dissapearing", arch.archID);
+			console.log("Giving triple %d %d %d", leftArch.archID, arch.archID, rightArch.archID);
+
+			let lastRight = false;
+
+			//Find both involved breakpoints
+			while(sndBP == null)
+			{
+				if(!currentNode instanceof Breakpoint)
+				{
+					throw "Diddn't find breakpoints for circleEvent"
+					return;
+				}
+				if(currentNode.tuple[0] == leftArch && currentNode.tuple[1] == arch)
+				{
+					if(firstBP == null)
+					{
+						firstBP = currentNode;
+						lastNode = currentNode;
+						currentNode = currentNode.rightChild;
+						lastRight = true;
+					}
+					else
+					{
+						sndBP = currentNode;
+					}
+				}
+				else if(currentNode.tuple[0] == arch && currentNode.tuple[1] == rightArch)
+				{
+					if(firstBP == null)
+					{
+						firstBP = currentNode;
+						lastNode = currentNode;
+						currentNode = currentNode.leftChild;
+						lastRight = false;
+					}
+					else
+					{
+						sndBP = currentNode;
+					}
+				}
+				else
+				{
+					lastNode = currentNode;
+					if(circleEvent.x > currentNode.breakX(circleEvent.y))
+					{
+						currentNode = currentNode.rightChild;
+						lastRight = true;
+					}
+					else
+					{
+						currentNode = currentNode.leftChild;
+						lastRight = false;
+					}
+				}
+			}
+			//Found both!
+			console.log(firstBP);
+			console.log(sndBP);
+			console.log(currentNode);
+			console.log(lastNode);
+			let sndOtherNode = (sndBP.rightChild == arch? sndBP.leftChild : sndBP.rightChild);
+			if(lastRight)
+			{
+				lastNode.rightChild = sndOtherNode;
+			}
+			else
+			{
+				lastNode.leftChild = sndOtherNode;
+			}
+
+			sndBP.edge.x = circleEvent.x;
+			sndBP.edge.y = circleEvent.eventY;
+			firstBP.edge.x = circleEvent.x;
+			firstBP.edge.y = circleEvent.eventY;
+			twinEdge = new Edge(null, null);
+			twinEdge.x = circleEvent.x;
+			twinEdge.y = circleEvent.eventY;
+			newEdge = new Edge(null, twinEdge);
+			twinEdge.twin = newEdge;
+
+			firstBP.tuple = [leftArch, rightArch];
+			firstBP.edge = newEdge;
+
 		}
 
 		BeachTree.prototype.draw = function(line)
@@ -127,7 +231,12 @@
 		BeachTree.prototype.print = function(line)
 		{
 			if(this.root != null)
+			{
+				c2.fillStyle = "#ffffff";
+				c2.fillRect(0, 0, canvas.width, canvas.height);
+
 				this.root.print(0, canvas.width, 40);
+			}
 		}
 
 		function BeachNode(){}
@@ -202,16 +311,22 @@
 			return findArchIntersect(this.tuple[0].site, this.tuple[1].site, line);
 		}
 
-		Breakpoint.prototype.addSite = function(site)
+		Breakpoint.prototype.addSite = function(site, rightBP)
 		{
 			let breakpointX = this.breakX(site.y)[myIntersect]; //Grabbing the "negative" X value will always give the appropriate sided X. Since the sites have a specified ordered in the tuple the positive X will be on the left side in left side breakpoints, and vice versa for right.
 			let goingRight = site.x > breakpointX;
 			let child = (goingRight? this.rightChild: this.leftChild);
 			if(child instanceof Arch)
 			{
-				newBreak = splitArch(child, site);
-				if(goingRight) this.rightChild = newBreak;
-				else this.leftChild = newBreak;
+				if(goingRight){
+					newBreak = splitArch(child, site, rightBP);
+					this.rightChild = newBreak;
+				}
+				else
+				{
+					newBreak = splitArch(child, site, this);
+					this.leftChild = newBreak;
+				}
 			}
 			else
 			{
@@ -354,7 +469,7 @@
 			return [meetingX, meetingY];
 		}
 
-		function splitArch(oldArch, newSite)
+		function splitArch(oldArch, newSite, farRightBP)
 		{
 			if(oldArch.circleEvent != null)
 			{
@@ -368,6 +483,8 @@
 			let leftArch = oldArch;
 			let midArch = new Arch(newSite);
 			let rightArch = new Arch(oldArch.site);
+			if(farRightBP)
+				farRightBP.tuple[0] = rightArch;
 
 			rightArch.before = midArch;
 			rightArch.after = leftArch.after;
@@ -539,7 +656,7 @@
 
 			let start = null;
 			let tree = new BeachTree();
-			let totTime = 5000;
+			let totTime = 50000;
 			let restorePoint;
 			let line = 0;
 
@@ -568,7 +685,7 @@
 					if(event instanceof Site)
 					{
 						tree.addSite(event);
-						console.log(tree);
+						//console.log(tree);
 
 						c2.fillStyle = "#ffffff";
 						c2.fillRect(0, 0, canvas.width, canvas.height);
@@ -576,6 +693,8 @@
 					}
 					else
 					{
+						tree.processCircle(event);
+						tree.print();
 						c1.fillStyle = "#0000FF";
 
 						c1.beginPath();
@@ -627,6 +746,8 @@
 					let event = queue.dequeue();
 					if(event instanceof Site)
 						tree.addSite(event);
+					else
+						tree.processCircle(event);
 				}
 				tree.print();
 			}
