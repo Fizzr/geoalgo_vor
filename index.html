@@ -62,11 +62,10 @@
 		c2.fillStyle = "#ffffff";
 		c2.fillRect(0, 0, canvas.width, canvas.height);
 
-		function Edge (origin, twin)
+		function Edge (originX, originY, twin)
 		{
-			this.origin = origin;
-			this.originX = null;
-			this.originY = null;
+			this.originX = originX;
+			this.originY = originY;
 			this.twin = twin;
 		}
 
@@ -137,15 +136,12 @@
 			let leftArch = arch.before;
 			let rightArch = arch.after;
 
-			console.log("Arch %d dissapearing", arch.archID);
-			console.log("Giving triple %d %d %d", leftArch.archID, arch.archID, rightArch.archID);
-
 			let lastRight = false;
 
 			//Find both involved breakpoints
 			while(sndBP == null)
 			{
-				if(!currentNode instanceof Breakpoint)
+				if(!(currentNode instanceof Breakpoint))
 				{
 					throw "Diddn't find breakpoints for circleEvent"
 					return;
@@ -158,6 +154,7 @@
 						lastNode = currentNode;
 						currentNode = currentNode.rightChild;
 						lastRight = true;
+
 					}
 					else
 					{
@@ -194,10 +191,6 @@
 				}
 			}
 			//Found both!
-			console.log(firstBP);
-			console.log(sndBP);
-			console.log(currentNode);
-			console.log(lastNode);
 			let sndOtherNode = (sndBP.rightChild == arch? sndBP.leftChild : sndBP.rightChild);
 			if(lastRight)
 			{
@@ -208,14 +201,12 @@
 				lastNode.leftChild = sndOtherNode;
 			}
 
-			sndBP.edge.x = circleEvent.x;
-			sndBP.edge.y = circleEvent.eventY;
-			firstBP.edge.x = circleEvent.x;
-			firstBP.edge.y = circleEvent.eventY;
-			twinEdge = new Edge(null, null);
-			twinEdge.x = circleEvent.x;
-			twinEdge.y = circleEvent.eventY;
-			newEdge = new Edge(null, twinEdge);
+			sndBP.edge.originX = circleEvent.x;
+			sndBP.edge.originY = circleEvent.eventY;
+			firstBP.edge.originX = circleEvent.x;
+			firstBP.edge.originY = circleEvent.eventY;
+			twinEdge = new Edge(circleEvent.x, circleEvent.eventY, null);
+			newEdge = new Edge(null, null, twinEdge);
 			twinEdge.twin = newEdge;
 
 			firstBP.tuple = [leftArch, rightArch];
@@ -243,10 +234,6 @@
 
 		function Breakpoint(leftArch, rightArch, leftChild, rightChild, isRightSide, edge)
 		{
-			if(!leftArch instanceof Arch || !rightArch instanceof Arch || !isRightSide instanceof Boolean || !leftChild instanceof BeachNode || !rightChild instanceof BeachNode)
-			{
-				throw "Invalid argument"
-			}
 			this.edge = edge;
 			this.tuple = [leftArch, rightArch];
 			this.leftChild = leftChild;
@@ -308,12 +295,12 @@
 
 		Breakpoint.prototype.breakX = function(line)
 		{
-			return findArchIntersect(this.tuple[0].site, this.tuple[1].site, line);
+			return findArchIntersect(this.tuple[0].site, this.tuple[1].site, line)[myIntersect];
 		}
 
 		Breakpoint.prototype.addSite = function(site, rightBP)
 		{
-			let breakpointX = this.breakX(site.y)[myIntersect]; //Grabbing the "negative" X value will always give the appropriate sided X. Since the sites have a specified ordered in the tuple the positive X will be on the left side in left side breakpoints, and vice versa for right.
+			let breakpointX = this.breakX(site.y); //Grabbing the "negative" X value will always give the appropriate sided X. Since the sites have a specified ordered in the tuple the positive X will be on the left side in left side breakpoints, and vice versa for right.
 			let goingRight = site.x > breakpointX;
 			let child = (goingRight? this.rightChild: this.leftChild);
 			if(child instanceof Arch)
@@ -339,10 +326,18 @@
 			let intersect = this.breakX(line);
 			let index = (this.isRightSide? 1: 0);
 			let invIndex = (this.isRightSide? 0: 1);
+			let startB;
 
-			let b = [intersect[myIntersect], this.tuple[0].site.getY(line, intersect[myIntersect])];
+			if(this.edge.twin.originX != null)
+			{
+				startB = [this.edge.twin.originX, this.edge.twin.originY];
+			}
+			else
+			{
+				startB = [this.tuple[invIndex].site.x, this.tuple[index].site.getY(this.tuple[invIndex].site.y, this.tuple[invIndex].site.x)];
+			}
 
-			let startB = [this.tuple[invIndex].site.x, this.tuple[index].site.getY(this.tuple[invIndex].site.y, this.tuple[invIndex].site.x)];
+			let b = [intersect, this.tuple[0].site.getY(line, intersect)];
 
 			c1.fillStyle = "#FF0000";
 
@@ -457,7 +452,7 @@
 
 			cross = v1[0]*v2[1] - v1[1]*v2[0];
 
-			if(cross >= 0)
+			if(cross <= 0)
 				return null; //Not right turn, not converging
 
 			leftLine = findLine(leftSite, midSite);
@@ -476,8 +471,8 @@
 				oldArch.circleEvent.falseAlarm = true;
 				oldArch.circleEvent = null;
 			}
-			var e1 = new Edge(null, null);
-			var e2 = new Edge(null, e1);
+			var e1 = new Edge(null, null, null);
+			var e2 = new Edge(null, null, e1);
 			e1.twin = e2;
 
 			let leftArch = oldArch;
@@ -505,10 +500,8 @@
 				let meeting = findLineIntersect(farLeftArch.site, leftArch.site, midArch.site);
 				if (meeting != null)
 				{
-					console.log("Meeting point x %d y %d. Site point x %d y %d", meeting[0], meeting[1], leftArch.site.x, leftArch.site.y);
 					let pointToEvent = [meeting[0]-leftArch.site.x, meeting[1]-leftArch.site.y];
 					let pteMag = Math.sqrt(Math.pow(pointToEvent[0],2)+Math.pow(pointToEvent[1],2));
-					console.log("left ", pointToEvent, pteMag);
 					let event = new CircleEvent(meeting[0], meeting[1]+pteMag, meeting[1], leftArch);
 					leftArch.circleEvent = event;
 					queue.queue(event);
@@ -521,7 +514,6 @@
 				{
 					let pointToEvent = [meeting[0]-rightArch.site.x, meeting[1]-rightArch.site.y];
 					let pteMag = Math.sqrt(Math.pow(pointToEvent[0],2)+Math.pow(pointToEvent[1],2));
-					console.log("right ", pointToEvent, pteMag);
 					let event = new CircleEvent(meeting[0], meeting[1]+pteMag, meeting[1], rightArch);
 					rightArch.circleEvent = event;
 					queue.queue(event);
@@ -647,8 +639,10 @@
 			site1 = new Site(300, 200);
 			site2 = new Site(400, 400);
 			site3 = new Site(500, 450);
+			site4 = new Site(200, 550);
+			site5 = new Site(300, 600);
 
-			let sites = [site1, site2, site3];
+			let sites = [site1, site2, site3];//, site4];//, site5];
 			for(point of sites)
 			{
 				queue.queue(point);
@@ -656,7 +650,7 @@
 
 			let start = null;
 			let tree = new BeachTree();
-			let totTime = 50000;
+			let totTime = 10000;
 			let restorePoint;
 			let line = 0;
 
