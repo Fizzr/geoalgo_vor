@@ -95,6 +95,7 @@
 		function BeachTree()
 		{
 			this.root = null;
+			this.edges = [];
 		}
 
 		BeachTree.prototype.addSite = function(site)
@@ -115,7 +116,7 @@
 				}
 				else
 				{
-					this.root.addSite(site);
+					this.root.addSite(site, null);
 				}
 			}
 		}
@@ -136,6 +137,8 @@
 			let leftArch = arch.before;
 			let rightArch = arch.after;
 
+			console.log("Circle event tripple %d %d %d", leftArch.archID, arch.archID, rightArch.archID);
+
 			let lastRight = false;
 
 			//Find both involved breakpoints
@@ -146,10 +149,12 @@
 					throw "Diddn't find breakpoints for circleEvent"
 					return;
 				}
+				console.log("Searching through %d", currentNode.bpID);
 				if(currentNode.tuple[0] == leftArch && currentNode.tuple[1] == arch)
 				{
 					if(firstBP == null)
 					{
+						console.log("Found first, left side");
 						firstBP = currentNode;
 						lastNode = currentNode;
 						currentNode = currentNode.rightChild;
@@ -165,6 +170,7 @@
 				{
 					if(firstBP == null)
 					{
+						console.log("Found first, right side");
 						firstBP = currentNode;
 						lastNode = currentNode;
 						currentNode = currentNode.leftChild;
@@ -178,7 +184,13 @@
 				else
 				{
 					lastNode = currentNode;
-					if(circleEvent.x > currentNode.breakX(circleEvent.y))
+					let breakX = currentNode.breakX(circleEvent.y)
+					console.log("event at x %f. break at %f", circleEvent.x, breakX);
+					if(circleEvent.x == breakX)
+					{
+						console.log("Oh snap!");
+					}
+					else if(circleEvent.x > breakX)
 					{
 						currentNode = currentNode.rightChild;
 						lastRight = true;
@@ -201,23 +213,86 @@
 				lastNode.leftChild = sndOtherNode;
 			}
 
-			sndBP.edge.originX = circleEvent.x;
-			sndBP.edge.originY = circleEvent.eventY;
-			firstBP.edge.originX = circleEvent.x;
-			firstBP.edge.originY = circleEvent.eventY;
+			leftArch.after = rightArch;
+			rightArch.before = leftArch;
+
+			firstEdge = firstBP.edge;
+			sndEdge = sndBP.edge;
+
+			sndEdge.originX = circleEvent.x;
+			sndEdge.originY = circleEvent.eventY;
+			firstEdge.originX = circleEvent.x;
+			firstEdge.originY = circleEvent.eventY;
+
+			if(sndEdge.twin.originX != null)
+			{
+				this.edges.push(sndEdge);
+			}
+			if(firstEdge.twin.originX != null)
+			{
+				this.edges.push(firstEdge);
+			}
+
 			twinEdge = new Edge(circleEvent.x, circleEvent.eventY, null);
 			newEdge = new Edge(null, null, twinEdge);
 			twinEdge.twin = newEdge;
+			this.edges.push(twinEdge);
 
 			firstBP.tuple = [leftArch, rightArch];
 			firstBP.edge = newEdge;
 
+			if(leftArch.circleEvent != null)
+			{
+				leftArch.circleEvent.falseAlarm = true;
+				console.log("2 Nullifying circleEvent for ", leftArch.archID);
+				leftArch.circleEvent = null;
+			}
+			if(rightArch.circleEvent != null)
+			{
+				rightArch.circleEvent.falseAlarm = true;
+				console.log("3 Nullifying circleEvent for ", rightArch.archID);
+				rightArch.circleEvent = null;
+			}
+
+			if(leftArch.before != null)
+			{
+				let event = detectCircleEvent(leftArch.before, leftArch, rightArch);
+				if(event != null)
+				{
+					leftArch.circleEvent = event;
+					console.log("adding CircleEvent for ", leftArch.archID);
+					queue.queue(event);
+				}
+			}
+			if(rightArch.after != null)
+			{
+				let event = detectCircleEvent(leftArch, rightArch, rightArch.after);
+				if(event != null)
+				{
+					rightArch.circleEvent = event;
+					console.log("adding CircleEvent for ", rightArch.archID);
+					queue.queue(event);
+				}
+			}
 		}
 
 		BeachTree.prototype.draw = function(line)
 		{
 			if(this.root != null)
+			{
 				this.root.draw(line);
+				c1.strokeStyle = "#ff0000"
+				for (edge of this.edges)
+				{
+					if(edge.twin.originX != null)
+					{
+						c1.beginPath();
+						c1.moveTo(edge.originX, edge.originY);
+						c1.lineTo(edge.twin.originX, edge.twin.originY);
+						c1.stroke();
+					}
+				}
+			}
 		}
 		BeachTree.prototype.print = function(line)
 		{
@@ -248,8 +323,6 @@
 			this.circleEvent = null;
 			this.before = null;
 			this.after = null;
-			this.breakpointLeft = null;
-			this.breakpointRight = null;
 			this.archID = numArch++;
 		}
 
@@ -280,16 +353,22 @@
 		{
 			if(leftSite.y == line || rightSite.y == line)
 				line = nextFloat(line);
+			if(line < leftSite.y || line < rightSite.y)
+			{
+				console.error("Line is smaller than both sites!");
+				line = nextFloat((rightSite.y>leftSite.y? rightSite.y:leftSite.y));
+			}
 			//console.log(leftSite, rightSite, line);
 			let a = leftSite.x;
 			let b = leftSite.y;
 			let c = rightSite.x;
 			let d = rightSite.y;
 			let l = line;
-
+			//console.log("abcdl ", a,b,c,d,l);
 			let squarePart = Math.sqrt(Math.pow((2*c)/(2*d - 2*l) - (2*a)/(2*b - 2*l), 2) - 4*(1/(2*b - 2*l) - 1/(2*d - 2*l)) * (Math.pow(a,2)/(2*b - 2*l) + Math.pow(b,2)/(2*b - 2*l) - Math.pow(l, 2)/(2*b - 2*l) - Math.pow(c, 2)/(2*d - 2*l) - Math.pow(d, 2)/(2*d - 2*l) + Math.pow(l, 2)/(2*d - 2*l)));
 			let posX = (squarePart + (2*a)/(2*b - 2*l) - (2*c)/(2*d - 2*l))/(2*(1/(2*b - 2*l) - 1/(2*d - 2*l)));
 			let negX = (-squarePart + (2*a)/(2*b - 2*l) - (2*c)/(2*d - 2*l))/(2*(1/(2*b - 2*l) - 1/(2*d - 2*l)));
+			//console.log("squares Neg ", squarePart, negX);
 			return[negX, posX];
 		}
 
@@ -317,7 +396,7 @@
 			}
 			else
 			{
-				child.addSite(site);
+				child.addSite(site, (goingRight? rightBP: this));
 			}
 		}
 
@@ -357,15 +436,15 @@
 		Breakpoint.prototype.print = function(start, end, height)
 		{
 			stdHeightDiff = 50;
-			botToAr = 16;
-			ArToTxt = 15;
+			botToAr = 20;
+			ArToTxt = 20;
 			c2.fillStyle = "#FF0000";
-			c2.font = "10px Arial";
+			c2.font = "15px Arial";
 			c2.textAlign = "center"
 			let mid = start + (end-start)/2;
 			c2.fillText(this.bpID, mid, height);
 			c2.fillStyle = "#0000FF";
-			c2.fillText("<"+this.tuple[0].archID+","+this.tuple[1].archID+">", mid, height+10)
+			c2.fillText("<"+this.tuple[0].archID+","+this.tuple[1].archID+">", mid, height+15)
 
 			c2.strokeStyle = "#000000";
 			c2.beginPath();
@@ -385,14 +464,13 @@
 		Arch.prototype.print = function(start, end, height)
 		{
 			c2.fillStyle = "#0000FF";
-			c2.font = "10px Arial";
+			c2.font = "15px Arial";
 			c2.textAlign = "center"
 			let mid = start + (end-start)/2;
 			c2.fillText(this.archID, mid, height);
 			c2.fillStyle = "#00BB00";
-			c2.fillText("Site "+ this.site.siteID, mid, height+10);
+			c2.fillText("Site "+ this.site.siteID, mid, height+15);
 			c2.fillStyle = "#FF0000";
-			c2.fillText("BP <" + (this.breakpointLeft? this.breakpointLeft.bpID: "null") + ", " +(this.breakpointRight? this.breakpointRight.bpID: "null") +">", mid, height+20);
 		}
 
 		Arch.prototype.draw = function(line)
@@ -464,12 +542,26 @@
 			return [meetingX, meetingY];
 		}
 
+		function detectCircleEvent(leftArch, midArch, rightArch)
+		{
+			let meeting = findLineIntersect(leftArch.site, midArch.site, rightArch.site);
+			if (meeting != null)
+			{
+				let pointToEvent = [meeting[0]-midArch.site.x, meeting[1]-midArch.site.y];
+				let pteMag = Math.sqrt(Math.pow(pointToEvent[0],2)+Math.pow(pointToEvent[1],2));
+				let event = new CircleEvent(meeting[0], meeting[1]+pteMag, meeting[1], midArch);
+				return event;
+			}
+			else return null;
+		}
+
 		function splitArch(oldArch, newSite, farRightBP)
 		{
 			if(oldArch.circleEvent != null)
 			{
 				oldArch.circleEvent.falseAlarm = true;
 				oldArch.circleEvent = null;
+				console.log("1 Nullifying circleEvent for ", oldArch.archID);
 			}
 			var e1 = new Edge(null, null, null);
 			var e2 = new Edge(null, null, e1);
@@ -497,25 +589,21 @@
 
 			if(farLeftArch != null)
 			{
-				let meeting = findLineIntersect(farLeftArch.site, leftArch.site, midArch.site);
-				if (meeting != null)
+				let event = detectCircleEvent(farLeftArch, leftArch, midArch);
+				if(event != null)
 				{
-					let pointToEvent = [meeting[0]-leftArch.site.x, meeting[1]-leftArch.site.y];
-					let pteMag = Math.sqrt(Math.pow(pointToEvent[0],2)+Math.pow(pointToEvent[1],2));
-					let event = new CircleEvent(meeting[0], meeting[1]+pteMag, meeting[1], leftArch);
 					leftArch.circleEvent = event;
+					console.log("adding CircleEvent for ", leftArch.archID);
 					queue.queue(event);
 				}
 			}
 			if(farRightArch != null)
 			{
-				let meeting = findLineIntersect(midArch.site, rightArch.site, farRightArch.site);
-				if (meeting != null)
+				let event = detectCircleEvent(midArch, rightArch, farRightArch);
+				if(event != null)
 				{
-					let pointToEvent = [meeting[0]-rightArch.site.x, meeting[1]-rightArch.site.y];
-					let pteMag = Math.sqrt(Math.pow(pointToEvent[0],2)+Math.pow(pointToEvent[1],2));
-					let event = new CircleEvent(meeting[0], meeting[1]+pteMag, meeting[1], rightArch);
 					rightArch.circleEvent = event;
+					console.log("adding CircleEvent for ", rightArch.archID);
 					queue.queue(event);
 				}
 			}
@@ -524,11 +612,6 @@
 			rightBP = new Breakpoint(midArch, rightArch, midArch, rightArch, true, e1);
 			leftBP.rightChild = rightBP;
 			//leftBP = new Breakpoint(leftArch, midArch, leftArch, rightBP, false, e2);
-
-			midArch.breakpointRight = rightBP;
-			rightArch.breakpointLeft = rightBP;
-			midArch.breakpointLeft = leftBP;
-			leftArch.breakpointRight = leftBP;
 
 			return leftBP;
 		}
@@ -570,79 +653,83 @@
 			return (1/(2*(b-l)))*(Math.pow(x,2)-2*a*x+Math.pow(a,2)+Math.pow(b,2)-Math.pow(l,2));
 		}
 
+		let first = true;
+		site1 = new Site(300, 200);
+		site2 = new Site(400, 400);
+		site3 = new Site(500, 450);
+		site4 = new Site(200, 550);
+		site5 = new Site(299, 600);
+		site6 = new Site(100, 700);
+		site7 = new Site(700, 100);
+		site8 = new Site(345, 654);
+		site9 = new Site(213, 432);
+		site10 = new Site(43, 143);
+		let sites = [site1, site2, site3, site4, site5, site6, site7, site8, site9, site10];
+		let restorePoint;
+		let tree;
 
-		$("#Test").click(function(){
-			site2 = new Site(400, 400);
-			site3 = new Site(500, 450);
-			let sites = [site2, site3]
 
+		$("#Test").click(function()
+		{
+			if(first)
+			{
+				first = false;
+				tree = new BeachTree();
+				for(point of sites)
+				{
+					queue.queue(point);
+				}
+				for(point of sites)
+				{
+					c1.fillStyle = "#000000";
+					c1.beginPath();
+					c1.arc(point.x, point.y, 5, 0, 2 * Math.PI, false);
+					c1.fill();
+				}
+				restorePoint = c1.getImageData(0, 0, canvas.width, canvas.height);
+			}
 			c1.fillStyle = "#ffffff";
 			c1.fillRect(0, 0, canvas.width, canvas.height);
 
-			c1.fillStyle = "#000000";
-
-			for(point of sites)
+			let line;
+			if(queue.length > 0)
 			{
-				c1.beginPath();
-				c1.arc(point.x, point.y, 5, 0, 2 * Math.PI, false);
-				c1.fill();
+				c1.putImageData(restorePoint, 0, 0);
+
+				let event = queue.dequeue();
+				line = event.y;
+				if(event instanceof Site)
+				{
+					tree.addSite(event);
+					tree.print();
+				}
+				else if(!event.falseAlarm)
+				{
+					tree.processCircle(event);
+					tree.print();
+					c1.fillStyle = "#0000FF";
+
+					c1.beginPath();
+					c1.arc(event.x, event.eventY, 5, 0, 2 * Math.PI, false);
+					c1.fill();
+
+					restorePoint = c1.getImageData(0, 0, canvas.width, canvas.height);
+				}
 			}
 
-			a2 = new Arch(site2);
-			a3 = new Arch(site3);
+			tree.draw(line);
 
-			let opac = 0.1;
-			let line = site3.y;
-			let intX;
-			let intY;
-			let seg = findLine(site2, site3);
-
-			let iterations = 10;
-			let range = 200;
-
-			for (let i = 0; i < iterations; i ++)
-			{
-				line = line + (range/iterations) *i;
-				opac = opac + (0.9/iterations)*i;
-				c1.globalAlpha = opac;
-				a2.draw(line);
-				a3.draw(line);
-
-				intX = findArchIntersect(site2, site3, line)[myIntersect];
-				intY = site2.getY(line, intX);
-
-				segX = seg.getX(intY);
-				segY = seg.getY(intX);
-
-				c1.fillStyle = "#00ff00";
-
-				c1.beginPath();
-				c1.arc(segX, segY, 5, 0, 2 * Math.PI, false);
-				c1.fill();
-
-				console.log("X discrepency ", intX - segX);
-				console.log("Y discrepency ", intY - segY);
-
-				c1.fillStyle = "#0000ff";
-
-				c1.beginPath();
-				c1.arc(intX, intY, 5, 0, 2 * Math.PI, false);
-				c1.fill();
-
-
-			}
+			c1.strokeStyle = "#ff0000";
+			c1.beginPath();
+			c1.moveTo(0, line);
+			c1.lineTo(canvas.width, line);
+			c1.stroke();
 
 		});
 
 		function voronoi(draw)
 		{
-			site1 = new Site(300, 200);
-			site2 = new Site(400, 400);
-			site3 = new Site(500, 450);
-			site4 = new Site(200, 550);
-			site5 = new Site(300, 600);
 
-			let sites = [site1, site2, site3];//, site4];//, site5];
 			for(point of sites)
 			{
 				queue.queue(point);
@@ -679,41 +766,35 @@
 					if(event instanceof Site)
 					{
 						tree.addSite(event);
-						//console.log(tree);
-
-						c2.fillStyle = "#ffffff";
-						c2.fillRect(0, 0, canvas.width, canvas.height);
 						tree.print();
 					}
-					else
+					else if(!event.falseAlarm)
 					{
 						tree.processCircle(event);
 						tree.print();
-						c1.fillStyle = "#0000FF";
 
+						//Mid
+						c1.fillStyle = "#0000FF";
 						c1.beginPath();
 						c1.arc(event.x, event.eventY, 5, 0, 2 * Math.PI, false);
 						c1.fill();
 
-						c1.fillStyle = "#00FFFF";
-
+						//Queue
+						/*c1.fillStyle = "#00FFFF";
 						c1.beginPath();
 						c1.arc(event.x, event.y, 5, 0, 2 * Math.PI, false);
 						c1.fill();
 
+						//Circle
 						c1.strokeStyle = "#00FF00";
-
 						c1.beginPath();
 						c1.arc(event.x, event.eventY, event.y-event.eventY, 0, 2 * Math.PI, false);
 						c1.stroke();
-
+						*/
 						restorePoint = c1.getImageData(0, 0, canvas.width, canvas.height);
 					}
 				}
 
-				// c1.fillStyle = "#ffffff";
-				// c1.fillRect(0, 0, canvas.width, canvas.height);
-				//
 				tree.draw(line);
 
 				c1.strokeStyle = "#ff0000";
@@ -724,7 +805,6 @@
 
 				timeDiff = timestep - start;
 				line = canvas.height * (timeDiff/totTime)
-				//if(line > 220) return;
 				if(timeDiff < totTime)
 				{
 					window.requestAnimationFrame(newDraw);
@@ -740,8 +820,10 @@
 					let event = queue.dequeue();
 					if(event instanceof Site)
 						tree.addSite(event);
-					else
+					else if(!event.falseAlarm)
+					{
 						tree.processCircle(event);
+					}
 				}
 				tree.print();
 			}
@@ -820,7 +902,7 @@
 				}
 			}
 			else {
-				console.log("Error in merging!");
+				console.error("Error in merging!");
 			}
 		}
 
@@ -860,14 +942,13 @@
 			c1.fillStyle = "#ffffff";
 			c1.fillRect(0, 0, canvas.width, canvas.height);
 
-			console.log("click");
 			try{
 				json = JSON.parse($("#freeInput").val());
 			}
 			catch (e) {
 			    if (e instanceof SyntaxError) {
 			        alert("Invalid json");
-					console.log(e);
+					console.error(e);
 			    } else {
 			        alert(e);
 			    }
@@ -978,7 +1059,6 @@
 							}
 							if (found && foundHere)
 							{
-								console.log("Connection");
 								mergeLines(foundAt, lines);
 								index = lines.indexOf(line);				//find redundant
 								lines.splice(index, 1);						//Remove redundant
@@ -991,17 +1071,14 @@
 						}
 						if(found == false)
 						{
-							console.log("Create new", index[0], index[1]);
 							ve = new vertexEdge(index[0], null, index[1], null);
 							vl = new vertexLine(ve, ve, IDs++);
 							lines.push(vl);
 						}
 					}
 				}
-				console.log(lines);
 				drawLines();
 
-				console.log("done");
 			}
 		});
 
@@ -1090,7 +1167,6 @@
 					first.endEdge = ve;
 					first.numEdges++;
 				}
-				console.log("Connecting", ve.startID, ve.endID, "dist", smallestDist);
 				v1x = vertices[ve.startID][0]- minX;
 				v1y = vertices[ve.startID][1]- minY;
 				v2x = vertices[ve.endID][0]- minX;
