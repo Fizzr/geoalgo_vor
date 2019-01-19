@@ -9,6 +9,7 @@
 		<button id="LogLinesBtn">Log Lines</button>
 		<button id="Special">Special</button>
 		<button id="Fast">Fast</button>
+		<button id="Step">Step</button>
 		<button id="Test">Test</button>
 		<br>
 		<canvas id="myCanvas" width="800" height="800" style="border:1px solid #000000;"></canvas>
@@ -48,7 +49,6 @@
 
 //Grabbing the "negative" X value will always give the appropriate sided X. Since the sites have a specified ordered in the tuple and the equation flipped upside down if sites are flipped.
 		const myIntersect = 0;
-		var queue = new PriorityQueue({ comparator: compareEvents });
 
 		var lines = [];
 
@@ -92,10 +92,11 @@
 		}
 
 
-		function BeachTree()
+		function BeachTree(queue)
 		{
 			this.root = null;
 			this.edges = [];
+			this.queue = queue;
 		}
 
 		BeachTree.prototype.addSite = function(site)
@@ -112,12 +113,23 @@
 			else {
 				if(this.root instanceof Arch)
 				{
-					this.root = splitArch(this.root, site, null);
+					this.root = splitArch(this.root, site, null, this.queue);
 				}
 				else
 				{
 					this.root.addSite(site, null);
 				}
+			}
+		}
+
+		function decFunc(bp, rightSide)
+		{
+			return function()
+			{
+				if(rightSide)
+					bp.rightHeight--;
+				else
+					bp.leftHeight--;
 			}
 		}
 
@@ -137,10 +149,10 @@
 			let leftArch = arch.before;
 			let rightArch = arch.after;
 
-			console.log("Circle event tripple %d %d %d", leftArch.archID, arch.archID, rightArch.archID);
+			console.log("Circle tripplet %d %d %d", leftArch.archID, arch.archID, rightArch.archID);
 
 			let lastRight = false;
-
+			funcList = [];
 			//Find both involved breakpoints
 			while(sndBP == null)
 			{
@@ -149,14 +161,16 @@
 					throw "Diddn't find breakpoints for circleEvent"
 					return;
 				}
-				console.log("Searching through %d", currentNode.bpID);
+				console.log("Searching through ", currentNode.bpID);
 				if(currentNode.tuple[0] == leftArch && currentNode.tuple[1] == arch)
 				{
 					if(firstBP == null)
 					{
-						console.log("Found first, left side");
 						firstBP = currentNode;
 						lastNode = currentNode;
+						if(currentNode.leftHeight >= currentNode.rightHeight)
+							funcList = [];
+						funcList.push(decFunc(currentNode, true));
 						currentNode = currentNode.rightChild;
 						lastRight = true;
 
@@ -170,9 +184,11 @@
 				{
 					if(firstBP == null)
 					{
-						console.log("Found first, right side");
 						firstBP = currentNode;
 						lastNode = currentNode;
+						if(currentNode.rightHeight >= currentNode.leftHeight)
+							funcList = [];
+						funcList.push(decFunc(currentNode, false));
 						currentNode = currentNode.leftChild;
 						lastRight = false;
 					}
@@ -184,19 +200,25 @@
 				else
 				{
 					lastNode = currentNode;
-					let breakX = currentNode.breakX(circleEvent.y)
-					console.log("event at x %f. break at %f", circleEvent.x, breakX);
+					let breakX = currentNode.breakX(circleEvent.y);
+					console.log("BreakX %f EventX %f", breakX, circleEvent.x);
 					if(circleEvent.x == breakX)
 					{
-						console.log("Oh snap!");
+						throw "Event on top of breakpoint, undefined behaviour!"
 					}
 					else if(circleEvent.x > breakX)
 					{
+						funcList.push(decFunc(currentNode, true));
+						if(currentNode.leftHeight >= currentNode.rightHeight)
+							funcList = [];
 						currentNode = currentNode.rightChild;
 						lastRight = true;
 					}
 					else
 					{
+						funcList.push(decFunc(currentNode, false));
+						if(currentNode.rightHeight >= currentNode.leftHeight)
+							funcList = [];
 						currentNode = currentNode.leftChild;
 						lastRight = false;
 					}
@@ -206,12 +228,33 @@
 			let sndOtherNode = (sndBP.rightChild == arch? sndBP.leftChild : sndBP.rightChild);
 			if(lastRight)
 			{
+				if(lastNode.leftHeight < lastNode.rightHeight)
+				{
+					for (func of funcList)
+						func();
+				}
+				else
+				{
+					lastNode.rightHeight--;
+				}
 				lastNode.rightChild = sndOtherNode;
 			}
 			else
 			{
+				if(lastNode.rightHeight < lastNode.leftHeight)
+				{
+					for (func of funcList)
+						func();
+				}
+				else
+				{
+					lastNode.leftHeight--;
+				}
 				lastNode.leftChild = sndOtherNode;
 			}
+
+			if(this.root.getHeight()-1 != (this.root.leftHeight>this.root.rightHeight? this.root.leftHeight: this.root.rightHeight))
+				console.error("Height error! Got %d, have %d and %d", this.root.getHeight()-1, this.root.leftHeight, this.root.rightHeight)
 
 			leftArch.after = rightArch;
 			rightArch.before = leftArch;
@@ -244,13 +287,11 @@
 			if(leftArch.circleEvent != null)
 			{
 				leftArch.circleEvent.falseAlarm = true;
-				console.log("2 Nullifying circleEvent for ", leftArch.archID);
 				leftArch.circleEvent = null;
 			}
 			if(rightArch.circleEvent != null)
 			{
 				rightArch.circleEvent.falseAlarm = true;
-				console.log("3 Nullifying circleEvent for ", rightArch.archID);
 				rightArch.circleEvent = null;
 			}
 
@@ -260,8 +301,7 @@
 				if(event != null)
 				{
 					leftArch.circleEvent = event;
-					console.log("adding CircleEvent for ", leftArch.archID);
-					queue.queue(event);
+					this.queue.queue(event);
 				}
 			}
 			if(rightArch.after != null)
@@ -270,25 +310,24 @@
 				if(event != null)
 				{
 					rightArch.circleEvent = event;
-					console.log("adding CircleEvent for ", rightArch.archID);
-					queue.queue(event);
+					this.queue.queue(event);
 				}
 			}
 		}
 
-		BeachTree.prototype.draw = function(line)
+		BeachTree.prototype.draw = function(line, hCorrecter, wCorrecter)
 		{
 			if(this.root != null)
 			{
-				this.root.draw(line);
+				this.root.draw(line, hCorrecter, wCorrecter);
 				c1.strokeStyle = "#ff0000"
 				for (edge of this.edges)
 				{
 					if(edge.twin.originX != null)
 					{
 						c1.beginPath();
-						c1.moveTo(edge.originX, edge.originY);
-						c1.lineTo(edge.twin.originX, edge.twin.originY);
+						c1.moveTo(wCorrecter(edge.originX), hCorrecter(edge.originY));
+						c1.lineTo(wCorrecter(edge.twin.originX), hCorrecter(edge.twin.originY));
 						c1.stroke();
 					}
 				}
@@ -307,7 +346,7 @@
 
 		function BeachNode(){}
 
-		function Breakpoint(leftArch, rightArch, leftChild, rightChild, isRightSide, edge)
+		function Breakpoint(leftArch, rightArch, leftChild, rightChild, isRightSide, edge, queue)
 		{
 			this.edge = edge;
 			this.tuple = [leftArch, rightArch];
@@ -315,6 +354,9 @@
 			this.rightChild = rightChild;
 			this.isRightSide = isRightSide;
 			this.bpID = numBP++;
+			this.queue = queue;
+			this.leftHeight = 1;
+			this.rightHeight = 1;
 		}
 
 		function Arch(site)
@@ -329,7 +371,8 @@
 		Breakpoint.prototype = Object.create(BeachNode.prototype);
 		Arch.prototype = Object.create(BeachNode.prototype);
 
-		function floatToBits(f) {
+		function floatToBits(f)
+		{
 		    var buf = new ArrayBuffer(4);
 		    (new Float32Array(buf))[0] = f;
 		    return (new Uint32Array(buf))[0];
@@ -348,6 +391,13 @@
 		    bitRepr++;
 		    return bitsToFloat(bitRepr);
 		}
+		function prevFloat(f) {
+			// Note that this moves towards 0.0
+			// This will fail at 0.0 and result in an NaN
+			var bitRepr = floatToBits(f);
+			bitRepr--;
+			return bitsToFloat(bitRepr);
+		}
 
 		function findArchIntersect(leftSite, rightSite, line)
 		{
@@ -358,18 +408,28 @@
 				console.error("Line is smaller than both sites!");
 				line = nextFloat((rightSite.y>leftSite.y? rightSite.y:leftSite.y));
 			}
-			//console.log(leftSite, rightSite, line);
 			let a = leftSite.x;
 			let b = leftSite.y;
 			let c = rightSite.x;
 			let d = rightSite.y;
 			let l = line;
-			//console.log("abcdl ", a,b,c,d,l);
 			let squarePart = Math.sqrt(Math.pow((2*c)/(2*d - 2*l) - (2*a)/(2*b - 2*l), 2) - 4*(1/(2*b - 2*l) - 1/(2*d - 2*l)) * (Math.pow(a,2)/(2*b - 2*l) + Math.pow(b,2)/(2*b - 2*l) - Math.pow(l, 2)/(2*b - 2*l) - Math.pow(c, 2)/(2*d - 2*l) - Math.pow(d, 2)/(2*d - 2*l) + Math.pow(l, 2)/(2*d - 2*l)));
 			let posX = (squarePart + (2*a)/(2*b - 2*l) - (2*c)/(2*d - 2*l))/(2*(1/(2*b - 2*l) - 1/(2*d - 2*l)));
 			let negX = (-squarePart + (2*a)/(2*b - 2*l) - (2*c)/(2*d - 2*l))/(2*(1/(2*b - 2*l) - 1/(2*d - 2*l)));
-			//console.log("squares Neg ", squarePart, negX);
 			return[negX, posX];
+		}
+
+		Breakpoint.prototype.getHeight = function()
+		{
+			let left;
+			let right;
+			if(this.leftChild instanceof Arch)
+				left = 1;
+			else left = this.leftChild.getHeight();
+			if(this.rightChild instanceof Arch)
+				right = 1;
+			else right = this.rightChild.getHeight();
+			return (left > right? left:right)+1;
 		}
 
 		Breakpoint.prototype.breakX = function(line)
@@ -385,22 +445,27 @@
 			if(child instanceof Arch)
 			{
 				if(goingRight){
-					newBreak = splitArch(child, site, rightBP);
+					newBreak = splitArch(child, site, rightBP, this.queue);
 					this.rightChild = newBreak;
+					this.rightHeight = 3;
 				}
 				else
 				{
-					newBreak = splitArch(child, site, this);
+					newBreak = splitArch(child, site, this, this.queue);
 					this.leftChild = newBreak;
+					this.leftHeight = 3;
 				}
 			}
 			else
 			{
-				child.addSite(site, (goingRight? rightBP: this));
+				let height = child.addSite(site, (goingRight? rightBP: this)) + 1;
+				if (goingRight) this.rightHeight = height;
+				else this.leftHeight = height;
 			}
+			return (this.rightHeight > this.leftHeight? this.rightHeight: this.leftHeight);
 		}
 
-		Breakpoint.prototype.draw = function(line)
+		Breakpoint.prototype.draw = function(line, hCorrecter, wCorrecter)
 		{
 			let intersect = this.breakX(line);
 			let index = (this.isRightSide? 1: 0);
@@ -421,17 +486,17 @@
 			c1.fillStyle = "#FF0000";
 
 			c1.beginPath();
-			c1.arc(b[0], b[1], 5, 0, 2 * Math.PI, false);
+			c1.arc(wCorrecter(b[0]), hCorrecter(b[1]), 5, 0, 2 * Math.PI, false);
 			c1.fill();
 
 			c1.strokeStyle = "#ff0000";
 			c1.beginPath();
-			c1.moveTo(b[0], b[1]);
-			c1.lineTo(startB[0], startB[1]);
+			c1.moveTo(wCorrecter(b[0]), hCorrecter(b[1]));
+			c1.lineTo(wCorrecter(startB[0]), hCorrecter(startB[1]));
 			c1.stroke();
 
-			this.leftChild.draw(line);
-			this.rightChild.draw(line);
+			this.leftChild.draw(line, hCorrecter, wCorrecter);
+			this.rightChild.draw(line, hCorrecter, wCorrecter);
 		}
 		Breakpoint.prototype.print = function(start, end, height)
 		{
@@ -439,41 +504,44 @@
 			botToAr = 20;
 			ArToTxt = 20;
 			c2.fillStyle = "#FF0000";
-			c2.font = "15px Arial";
+			c2.font = "12px Arial";
 			c2.textAlign = "center"
 			let mid = start + (end-start)/2;
 			c2.fillText(this.bpID, mid, height);
 			c2.fillStyle = "#0000FF";
-			c2.fillText("<"+this.tuple[0].archID+","+this.tuple[1].archID+">", mid, height+15)
+			c2.fillText(this.tuple[0].archID+","+this.tuple[1].archID, mid, height+15)
+
+			let ratio = this.leftHeight/(this.leftHeight+this.rightHeight);
+			let leftPartition = (end-start) * ratio;
 
 			c2.strokeStyle = "#000000";
 			c2.beginPath();
 			c2.moveTo(mid, height+botToAr);
-			c2.lineTo(start + (mid-start)/2, height+stdHeightDiff);
+			c2.lineTo(start + (leftPartition)/2, height+stdHeightDiff);
 			c2.stroke();
 
 			c2.beginPath();
 			c2.moveTo(mid, height+botToAr);
-			c2.lineTo(mid + (end-mid)/2, height+stdHeightDiff);
+			c2.lineTo(start+leftPartition + (end-(start+leftPartition))/2, height+stdHeightDiff);
 			c2.stroke();
 
-			this.leftChild.print(start, mid, height+stdHeightDiff+ArToTxt);
-			this.rightChild.print(mid, end, height+stdHeightDiff+ArToTxt);
+			this.leftChild.print(start, start+leftPartition, height+stdHeightDiff+ArToTxt);
+			this.rightChild.print(start+leftPartition, end, height+stdHeightDiff+ArToTxt);
 		}
 
 		Arch.prototype.print = function(start, end, height)
 		{
 			c2.fillStyle = "#0000FF";
-			c2.font = "15px Arial";
+			c2.font = "12px Arial";
 			c2.textAlign = "center"
 			let mid = start + (end-start)/2;
 			c2.fillText(this.archID, mid, height);
 			c2.fillStyle = "#00BB00";
-			c2.fillText("Site "+ this.site.siteID, mid, height+15);
+			c2.fillText(this.site.siteID, mid, height+15);
 			c2.fillStyle = "#FF0000";
 		}
 
-		Arch.prototype.draw = function(line)
+		Arch.prototype.draw = function(line, hCorrecter, wCorrecter)
 		{
 			if(this.site.y == line)
 				line = nextFloat(line);
@@ -487,8 +555,8 @@
 			c1.strokeStyle = "#000000";
 
 			c1.beginPath();
-			c1.moveTo(tupX[0], 0);
-			c1.quadraticCurveTo(cpx, cpy, tupX[1], 0);
+			c1.moveTo(wCorrecter(tupX[0]), hCorrecter(0));
+			c1.quadraticCurveTo(wCorrecter(cpx), hCorrecter(cpy), wCorrecter(tupX[1]), hCorrecter(0));
 			c1.stroke();
 
 		}
@@ -516,6 +584,7 @@
 
 			p1Y = leftSite.getY(bigY+1, p1X);
 			p2Y = leftSite.getY(bigY+2, p2X);
+
 
 			slope = (p2Y-p1Y)/(p2X-p1X);
 			offset = p1Y - slope*p1X;
@@ -555,13 +624,12 @@
 			else return null;
 		}
 
-		function splitArch(oldArch, newSite, farRightBP)
+		function splitArch(oldArch, newSite, farRightBP, queue)
 		{
 			if(oldArch.circleEvent != null)
 			{
 				oldArch.circleEvent.falseAlarm = true;
 				oldArch.circleEvent = null;
-				console.log("1 Nullifying circleEvent for ", oldArch.archID);
 			}
 			var e1 = new Edge(null, null, null);
 			var e2 = new Edge(null, null, e1);
@@ -593,7 +661,6 @@
 				if(event != null)
 				{
 					leftArch.circleEvent = event;
-					console.log("adding CircleEvent for ", leftArch.archID);
 					queue.queue(event);
 				}
 			}
@@ -603,14 +670,14 @@
 				if(event != null)
 				{
 					rightArch.circleEvent = event;
-					console.log("adding CircleEvent for ", rightArch.archID);
 					queue.queue(event);
 				}
 			}
 
-			leftBP = new Breakpoint(leftArch, midArch, leftArch, null, false, e2);
-			rightBP = new Breakpoint(midArch, rightArch, midArch, rightArch, true, e1);
+			leftBP = new Breakpoint(leftArch, midArch, leftArch, null, false, e2, queue);
+			rightBP = new Breakpoint(midArch, rightArch, midArch, rightArch, true, e1, queue);
 			leftBP.rightChild = rightBP;
+			leftBP.rightHeight = 2;
 			//leftBP = new Breakpoint(leftArch, midArch, leftArch, rightBP, false, e2);
 
 			return leftBP;
@@ -653,118 +720,141 @@
 			return (1/(2*(b-l)))*(Math.pow(x,2)-2*a*x+Math.pow(a,2)+Math.pow(b,2)-Math.pow(l,2));
 		}
 
-		let first = true;
-		site1 = new Site(300, 200);
-		site2 = new Site(400, 400);
-		site3 = new Site(500, 450);
-		site4 = new Site(200, 550);
-		site5 = new Site(299, 600);
-		site6 = new Site(100, 700);
-		site7 = new Site(700, 100);
-		site8 = new Site(345, 654);
-		site9 = new Site(213, 432);
-		site10 = new Site(43, 143);
-		let sites = [site1, site2, site3, site4, site5, site6, site7, site8, site9, site10];
-		let restorePoint;
-		let tree;
+		function testSites(){
+			site1 = new Site(300, 200);
+			site2 = new Site(400, 400);
+			site3 = new Site(500, 450);
+			site4 = new Site(200, 550);
+			site5 = new Site(299, 600);
+			site6 = new Site(100, 700);
+			site7 = new Site(700, 100);
+			site8 = new Site(345, 654);
+			site9 = new Site(213, 432);
+			site10 = new Site(43, 143);
+			return [site1, site2, site3, site4, site5, site6, site7, site8, site9, site10];
+		}
 
+		function properSites()
+		{
+			let json;
+			try{
+				json = JSON.parse($("#freeInput").val());
+			}
+			catch (e) {
+				if (e instanceof SyntaxError) {
+					alert("Invalid json");
+					console.error(e);
+				} else {
+					alert(e);
+				}
+				return;
+			}
+			verticesGroup = json.vertices;
+			verticesGroup = verticesGroup.split(";");
+			sites = []
+			for (group of verticesGroup)
+			{
+				divved = group.split(",");
+				sites.push(new Site(divved[0], divved[1]));
+			}
+			return sites;
+		}
 
 		$("#Test").click(function()
 		{
-			if(first)
-			{
-				first = false;
-				tree = new BeachTree();
-				for(point of sites)
-				{
-					queue.queue(point);
-				}
-				for(point of sites)
-				{
-					c1.fillStyle = "#000000";
-					c1.beginPath();
-					c1.arc(point.x, point.y, 5, 0, 2 * Math.PI, false);
-					c1.fill();
-				}
-				restorePoint = c1.getImageData(0, 0, canvas.width, canvas.height);
+			let json;
+			try{
+				json = JSON.parse($("#freeInput").val());
 			}
-			c1.fillStyle = "#ffffff";
-			c1.fillRect(0, 0, canvas.width, canvas.height);
-
-			let line;
-			if(queue.length > 0)
+			catch (e) {
+				if (e instanceof SyntaxError) {
+					alert("Invalid json");
+					console.error(e);
+				} else {
+					alert(e);
+				}
+				return;
+			}
+			verticesGroup = json.vertices;
+			verticesGroup = verticesGroup.split(";");
+			sites = []
+			for (group of verticesGroup)
 			{
-				c1.putImageData(restorePoint, 0, 0);
-
-				let event = queue.dequeue();
-				line = event.y;
-				if(event instanceof Site)
-				{
-					tree.addSite(event);
-					tree.print();
-				}
-				else if(!event.falseAlarm)
-				{
-					tree.processCircle(event);
-					tree.print();
-					c1.fillStyle = "#0000FF";
-
-					c1.beginPath();
-					c1.arc(event.x, event.eventY, 5, 0, 2 * Math.PI, false);
-					c1.fill();
-
-					restorePoint = c1.getImageData(0, 0, canvas.width, canvas.height);
-				}
+				divved = group.split(",");
+				sites.push(new Site(divved[0], divved[1]));
 			}
 
-			tree.draw(line);
+			minX = json.boundingBox.min[0];
+			minY = json.boundingBox.min[1];
+			maxX = json.boundingBox.max[0];
+			maxY = json.boundingBox.max[1];
 
-			c1.strokeStyle = "#ff0000";
-			c1.beginPath();
-			c1.moveTo(0, line);
-			c1.lineTo(canvas.width, line);
-			c1.stroke();
+			heightCoef = (canvas.height / (maxY-minY)) * 0.95;
+			widthCoef = (canvas.width / (maxX-minX)) * 0.95;
+			heightBuff = canvas.height * 0.025;
+			widthBuff = canvas.width * 0.025;
+
+			console.log(sites.length);
+			console.log("X %d-%d, Y %d-%d", minX, maxX, minY, maxY);
+			//func =
+			voronoi(sites, true, false, makeCoordCorrecter(heightCoef, heightBuff, minY), makeCoordCorrecter(widthCoef, widthBuff, minX), minY, maxY);
+			//$("#Test").off("click").click(func);
 
 		});
 
-		function voronoi(draw)
+		function makeCoordCorrecter(coef, buff, offset)
 		{
-
-			for(point of sites)
+			return function(coord)
 			{
-				queue.queue(point);
+				return (coord-offset) * coef + buff;
 			}
+		}
 
+		function voronoi(sites, draw, step, hCorrecter, wCorrecter, minY, maxY)
+		{
+			var queue = new PriorityQueue({ initialValues: sites, comparator: compareEvents });
 			let start = null;
-			let tree = new BeachTree();
+			let tree = new BeachTree(queue);
 			let totTime = 10000;
 			let restorePoint;
 			let line = 0;
+			let siteID = 1;
+
+			let firstEvent = queue.dequeue();
+			if(firstEvent.y == queue.peek().y)
+				firstEvent.y = prevFloat(firstEvent.y);
+			queue.queue(firstEvent);
 
 			newDraw = function (timestep)
 			{
 				if(!start)
 				{
 					start = timestep;
-
 					c1.fillStyle = "#ffffff";
 					c1.fillRect(0, 0, canvas.width, canvas.height);
 					for(point of sites)
 					{
+
 						c1.fillStyle = "#000000";
 
 						c1.beginPath();
-						c1.arc(point.x, point.y, 5, 0, 2 * Math.PI, false);
+						c1.arc(wCorrecter(point.x), hCorrecter(point.y), 5, 0, 2 * Math.PI, false);
 						c1.fill();
 					}
 					restorePoint = c1.getImageData(0, 0, canvas.width, canvas.height);
 				}
+				let shouldStep = true;
 				c1.putImageData(restorePoint, 0, 0);
-				while(queue.length > 0 && queue.peek().y < line)
+				while(queue.length > 0 && ((queue.peek().y < line && !step) || (step && shouldStep)))
 				{
 					let event = queue.dequeue();
+					if(step)
+					{
+						line = event.y;
+					}
 					if(event instanceof Site)
 					{
+						event.siteID = siteID++;
 						tree.addSite(event);
 						tree.print();
 					}
@@ -776,43 +866,46 @@
 						//Mid
 						c1.fillStyle = "#0000FF";
 						c1.beginPath();
-						c1.arc(event.x, event.eventY, 5, 0, 2 * Math.PI, false);
+						c1.arc(wCorrecter(event.x), hCorrecter(event.eventY), 5, 0, 2 * Math.PI, false);
 						c1.fill();
 
-						//Queue
-						/*c1.fillStyle = "#00FFFF";
-						c1.beginPath();
-						c1.arc(event.x, event.y, 5, 0, 2 * Math.PI, false);
-						c1.fill();
-
-						//Circle
-						c1.strokeStyle = "#00FF00";
-						c1.beginPath();
-						c1.arc(event.x, event.eventY, event.y-event.eventY, 0, 2 * Math.PI, false);
-						c1.stroke();
-						*/
 						restorePoint = c1.getImageData(0, 0, canvas.width, canvas.height);
 					}
+					else
+					{
+						continue;
+					}
+					shouldStep = false;
+				}
+				if(step && shouldStep)
+				{
+					line = maxY
 				}
 
-				tree.draw(line);
+				tree.draw(line, hCorrecter, wCorrecter);
 
 				c1.strokeStyle = "#ff0000";
 				c1.beginPath();
-				c1.moveTo(0, line);
-				c1.lineTo(canvas.width, line);
+				c1.moveTo(0, hCorrecter(line));
+				c1.lineTo(canvas.width, hCorrecter(line));
 				c1.stroke();
 
-				timeDiff = timestep - start;
-				line = canvas.height * (timeDiff/totTime)
-				if(timeDiff < totTime)
-				{
-					window.requestAnimationFrame(newDraw);
+				if(draw){
+					timeDiff = timestep - start;
+					line = minY + (maxY-minY) * (timeDiff/totTime)
+					if(timeDiff < totTime)
+					{
+						window.requestAnimationFrame(newDraw);
+					}
 				}
-
 			};
 			if(draw)
 				window.requestAnimationFrame(newDraw);
+			else if(step)
+			{
+				newDraw();
+				return newDraw;
+			}
 			else
 			{
 				while(queue.length > 0)
@@ -830,10 +923,16 @@
 		}
 
 		$("#Special").click(function(){
-			voronoi(true);
+			voronoi(testSites(), true, false, makeCoordCorrecter(0.5, 0, -canvas.height/2), makeCoordCorrecter(0.5 ,0, -canvas.height/2), 0, 2*canvas.height);
 		});
+
 		$("#Fast").click(function(){
-			voronoi(false);
+			voronoi(properSites(), false, false, null, null, null, null, null);
+		});
+
+		$("#Step").click(function(){
+			func = voronoi(testSites(), false, true, makeCoordCorrecter(1, 0, 0), makeCoordCorrecter(1 ,0, 0), 0, 2*canvas.height);
+			$("#Step").off("click").click(func);
 		});
 
 		function vertexEdge(startID, startEdge, endID, endEdge)
@@ -863,7 +962,6 @@
 			}
 			else if(first.endEdge.endID == second.startEdge.startID)
 			{
-				//console.log("end to start");
 				second.startEdge.startEdge = first.endEdge; //Connect ends
 				first.endEdge.endEdge = second.startEdge;	//Connect ends
 				first.endEdge = second.endEdge;				//Take over end
@@ -871,7 +969,6 @@
 			}
 			else if(first.startEdge.startID == second.startEdge.startID)
 			{
-				//console.log("Start to start");
 				proc = second.startEdge;
 				prev = first.startEdge
 				while(proc != null)
@@ -887,7 +984,6 @@
 			}
 			else if(first.endEdge.endID == second.endEdge.endID)
 			{
-				//console.log("end to end");
 				proc = second.endEdge;
 				prev = first.endEdge
 				while(proc != null)
@@ -942,6 +1038,7 @@
 			c1.fillStyle = "#ffffff";
 			c1.fillRect(0, 0, canvas.width, canvas.height);
 
+			let json;
 			try{
 				json = JSON.parse($("#freeInput").val());
 			}
