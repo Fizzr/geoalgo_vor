@@ -10,6 +10,7 @@
 		<button id="Special">Special</button>
 		<button id="Fast">Fast</button>
 		<button id="Step">Step</button>
+		<button id="Real">Real</button>
 		<button id="Test">Test</button>
 		<br>
 		<canvas id="myCanvas" width="800" height="800" style="border:1px solid #000000;"></canvas>
@@ -318,6 +319,25 @@
 			}
 		}
 
+		BeachTree.prototype.deepRemove = function(circleEvent)
+		{
+			if(this.root != null)
+			{
+				let leftArch = circleEvent.dissapearingArch.before;
+				let rightArch = circleEvent.dissapearingArch.after;
+				console.log("Dissapearing tripple %d %d %d", leftArch.archID, circleEvent.dissapearingArch.archID, rightArch.archID);
+				let res = this.root.deepRemove(circleEvent, leftArch, rightArch, false);
+				if(!res[0])
+				{
+					throw "Failed to deep remove!"
+				}
+				for(edge of res[2])
+				{
+					this.edges.push(edge);
+				}
+			}
+		}
+
 		BeachTree.prototype.draw = function(line, hCorrecter, wCorrecter)
 		{
 			if(this.root != null)
@@ -326,6 +346,7 @@
 				c1.strokeStyle = "#ff0000"
 				for (edge of this.edges)
 				{
+					console.log(edge);
 					if(edge.twin.originX != null)
 					{
 						c1.beginPath();
@@ -440,8 +461,9 @@
 			return findArchIntersect(this.tuple[0].site, this.tuple[1].site, line)[myIntersect];
 		}
 
-		Breakpoint.prototype.deepRemove(circleEvent, leftArch, rightArch, firstFound)
+		Breakpoint.prototype.deepRemove = function(circleEvent, leftArch, rightArch, firstFound)
 		{
+			console.log("BP ", this.bpID);
 			let found = false;
 			let rightSide = false;
 			if(this.tuple[0] == leftArch && this.tuple[1] == circleEvent.dissapearingArch)
@@ -449,42 +471,99 @@
 				found = true;
 				rightSide = false;
 			}
-			else if (this.tuple[0] == circleEvent.dissapearingArch && this.tuple[1] = rightArch)
+			else if (this.tuple[0] == circleEvent.dissapearingArch && this.tuple[1] == rightArch)
 			{
 				found = true;
 				rightSide = true;
+
+			}
+			let oldEdge = [];
+			if(found)
+			{
+				this.edge.originX = circleEvent.x;
+				this.edge.originY = circleEvent.eventY;
+				if(this.edge.twin.originX == null)
+					oldEdge.push(this.edge);
+				if(!firstFound)
+				{
+					twinEdge = new Edge(circleEvent.x, circleEvent.eventY, null);
+					newEdge = new Edge(null, null, twinEdge);
+					twinEdge.twin = newEdge;
+					this.edge = newEdge;
+					oldEdge.push(twinEdge);
+				}
 
 			}
 			if(found && firstFound)
 			{
 				//false flag old event on left and right
 				//find new events for left and right.
+				leftArch.after = rightArch;
+				rightArch.before = leftArch;
+				if(leftArch.before != null)
+				{
+					let event = detectCircleEvent(leftArch.before, leftArch, rightArch);
+					if(event != null)
+					{
+						leftArch.circleEvent = event;
+						this.queue.queue(event);
+					}
+				}
+				if(rightArch.after != null)
+				{
+					let event = detectCircleEvent(leftArch, rightArch, rightArch.after);
+					if(event != null)
+					{
+						rightArch.circleEvent = event;
+						this.queue.queue(event);
+					}
+				}
+
+				console.log("Found snd at BP ", this.bpID);
+				return (rightSide ? this.rightChild: this.leftChild);
 			}
 			else
 			{
 				if(found)
 				{
-					this.tuple[leftArch, rightArch];
+					this.tuple = [leftArch, rightArch];
 				}
-				leftRes = this.leftChild.deepRemove(circleEvent, leftArch, rightArch, found || firstFound);
-				rightRes = this.rightChild.deepRemove(circleEvent, leftArch, rightArch, found || firstFound);
+
+
+				let leftRes = this.leftChild.deepRemove(circleEvent, leftArch, rightArch, found || firstFound);
+				let rightRes = this.rightChild.deepRemove(circleEvent, leftArch, rightArch, found || firstFound);
+
+				//console.log("resses BP %d.\n %o %o,", this.bpID, leftRes, rightRes);
 
 				let decreased = false;
-				if((leftRes instanceof BeachNode)
+				let recFound = false;
+				let rightFound = false;
+				let newArray = [];
+				if(leftRes instanceof BeachNode)
 				{
+					console.log("Found direct left BP ", this.bpID);
+					rightFound = false;
+					recFound = true;
 					this.leftChild = leftRes;
 					if(this.leftHeight > this.rightHeight) decreased = true;
 					this.leftHeight = 1;
 				}
 				else if(rightRes instanceof BeachNode)
 				{
-					this.rightChild = leftRes;
+					console.log("Found direct right BP ", this.bpID);
+					rightFound = true;
+					recFound = true;
+					this.rightChild = rightRes;
 					if(this.leftHeight < this.rightHeight) decreased = true;
 					this.rightHeight = 1;
 				}
 				else if(leftRes[0] == true)
 				{
-					if[leftRes[1] == true]
+					console.log("Found rec left BP ", this.bpID);
+					rightFound = false;
+					recFound = true;
+					newArray = leftRes[2];
+					if(leftRes[1] == true)
 					{
 						if(this.leftHeight > this.rightHeight) decreased = true;
 						this.leftHeight--;
@@ -492,14 +571,31 @@
 				}
 				else if(rightRes[0] == true)
 				{
+					console.log("Found rec right BP ", this.bpID);
+					rightFound = true;
+					recFound = true;
+					newArray = rightRes[2];
 					if(rightRes[1] == true)
 					{
 						if(this.leftHeight < this.rightHeight) decreased = true;
 						this.rightHeight--;
 					}
 				}
+
+				newArray.push(...oldEdge);
+				if(recFound)
+				{
+					//console.log("trying to return BP ", this.bpID, [recFound, decreased, newArray]);
+					return [recFound, decreased, newArray];
+				}
+				else return [false, false, newArray];
 			}
 
+		}
+
+		Arch.prototype.deepRemove = function()
+		{
+			return [false,false,[]];
 		}
 
 		Breakpoint.prototype.addSite = function(site, rightBP)
@@ -566,7 +662,7 @@
 		Breakpoint.prototype.print = function(start, end, height)
 		{
 			stdHeightDiff = 50;
-			botToAr = 20;
+			botToAr = 35;
 			ArToTxt = 20;
 			c2.fillStyle = "#FF0000";
 			c2.font = "12px Arial";
@@ -575,6 +671,7 @@
 			c2.fillText(this.bpID, mid, height);
 			c2.fillStyle = "#0000FF";
 			c2.fillText(this.tuple[0].archID+","+this.tuple[1].archID, mid, height+15)
+			c2.fillText(this.leftHeight + " h " + this.rightHeight, mid, height + 30)
 
 			let ratio = this.leftHeight/(this.leftHeight+this.rightHeight);
 			let leftPartition = (end-start) * ratio;
@@ -825,7 +922,7 @@
 			return sites;
 		}
 
-		$("#Test").click(function()
+		$("#Real").click(function()
 		{
 			let json;
 			try{
@@ -885,7 +982,7 @@
 
 			//func =
 			voronoi(sites, true, false, makeCoordCorrecter(heightCoef, heightBuff, 0), makeCoordCorrecter(widthCoef, widthBuff, 0), 0, maxY*10);
-			//$("#Test").off("click").click(func);
+			//$("#Real").off("click").click(func);
 
 		});
 
@@ -909,6 +1006,14 @@
 				return (coord-offset) * coef + buff;
 			}
 		}
+
+		$("#Test").click(function()
+		{
+			let a = [1,2];
+		 	let b = [3];
+			a.push.apply(null, b);
+			console.log(a);
+		});
 
 		function voronoi(sites, draw, step, hCorrecter, wCorrecter, minY, maxY)
 		{
@@ -958,7 +1063,8 @@
 					}
 					else if(!event.falseAlarm)
 					{
-						tree.processCircle(event);
+						//tree.processCircle(event);
+						tree.deepRemove(event);
 						tree.print();
 
 						//Mid
@@ -1029,14 +1135,14 @@
 			mapper = makeMapper(0, 800, 0, 1400);
 			coef = 800/1400;
 			sites = testSites();
-			for (site of sites)
+/*			for (site of sites)
 			{
 				console.log("From %d %d", site.x, site.y);
 				site.x = mapper(site.x);
 				site.y = mapper(site.y);
 				console.log("To %d %d", site.x, site.y);
-			}
-			voronoi(sites, true, false, makeCoordCorrecter(coef, 0, 0), makeCoordCorrecter(coef ,0, 0), 0, 1400);
+			}*/
+			voronoi(sites, true, false, makeCoordCorrecter(0.5, 0, -400), makeCoordCorrecter(0.5 ,0, -400), 0, 1400);
 		});
 
 		$("#Fast").click(function(){
@@ -1044,7 +1150,7 @@
 		});
 
 		$("#Step").click(function(){
-			func = voronoi(testSites(), false, true, makeCoordCorrecter(1, 0, 0), makeCoordCorrecter(1 ,0, 0), 0, 2*canvas.height);
+			func = voronoi(testSites(), false, true, makeCoordCorrecter(0.5, 0, -800), makeCoordCorrecter(0.5 ,0, -400), 0, 2*canvas.height);
 			$("#Step").off("click").click(func);
 		});
 
