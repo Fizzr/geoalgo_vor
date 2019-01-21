@@ -105,6 +105,9 @@
 			{
 				throw "Invalid Argument, not of instance Site"
 			}
+			// if(isNaN(site.y))
+			// 	console.log("Bleeh")
+			// console.log(site.x, site.y);
 			if(this.root == null)
 			{
 				let arch = new Arch(site);
@@ -437,6 +440,68 @@
 			return findArchIntersect(this.tuple[0].site, this.tuple[1].site, line)[myIntersect];
 		}
 
+		Breakpoint.prototype.deepRemove(circleEvent, leftArch, rightArch, firstFound)
+		{
+			let found = false;
+			let rightSide = false;
+			if(this.tuple[0] == leftArch && this.tuple[1] == circleEvent.dissapearingArch)
+			{
+				found = true;
+				rightSide = false;
+			}
+			else if (this.tuple[0] == circleEvent.dissapearingArch && this.tuple[1] = rightArch)
+			{
+				found = true;
+				rightSide = true;
+
+			}
+			if(found && firstFound)
+			{
+				//false flag old event on left and right
+				//find new events for left and right.
+			}
+			else
+			{
+				if(found)
+				{
+					this.tuple[leftArch, rightArch];
+				}
+				leftRes = this.leftChild.deepRemove(circleEvent, leftArch, rightArch, found || firstFound);
+				rightRes = this.rightChild.deepRemove(circleEvent, leftArch, rightArch, found || firstFound);
+
+				let decreased = false;
+				if((leftRes instanceof BeachNode)
+				{
+					this.leftChild = leftRes;
+					if(this.leftHeight > this.rightHeight) decreased = true;
+					this.leftHeight = 1;
+				}
+				else if(rightRes instanceof BeachNode)
+				{
+					this.rightChild = leftRes;
+					if(this.leftHeight < this.rightHeight) decreased = true;
+					this.rightHeight = 1;
+				}
+				else if(leftRes[0] == true)
+				{
+					if[leftRes[1] == true]
+					{
+						if(this.leftHeight > this.rightHeight) decreased = true;
+						this.leftHeight--;
+					}
+				}
+				else if(rightRes[0] == true)
+				{
+					if(rightRes[1] == true)
+					{
+						if(this.leftHeight < this.rightHeight) decreased = true;
+						this.rightHeight--;
+					}
+				}
+			}
+
+		}
+
 		Breakpoint.prototype.addSite = function(site, rightBP)
 		{
 			let breakpointX = this.breakX(site.y); //Grabbing the "negative" X value will always give the appropriate sided X. Since the sites have a specified ordered in the tuple the positive X will be on the left side in left side breakpoints, and vice versa for right.
@@ -755,7 +820,7 @@
 			for (group of verticesGroup)
 			{
 				divved = group.split(",");
-				sites.push(new Site(divved[0], divved[1]));
+				sites.push(new Site(parseFloat(divved[0]), parseFloat(divved[1])));
 			}
 			return sites;
 		}
@@ -775,32 +840,67 @@
 				}
 				return;
 			}
-			verticesGroup = json.vertices;
-			verticesGroup = verticesGroup.split(";");
-			sites = []
-			for (group of verticesGroup)
-			{
-				divved = group.split(",");
-				sites.push(new Site(divved[0], divved[1]));
-			}
-
 			minX = json.boundingBox.min[0];
 			minY = json.boundingBox.min[1];
 			maxX = json.boundingBox.max[0];
 			maxY = json.boundingBox.max[1];
 
-			heightCoef = (canvas.height / (maxY-minY)) * 0.95;
-			widthCoef = (canvas.width / (maxX-minX)) * 0.95;
+			xMapper = makeMapper(minX-1, maxX+1, 0, maxX * 10);
+			yMapper = makeMapper(minY-1, maxY+1, 0, maxY * 10);
+
+			verticesGroup = json.vertices;
+			verticesGroup = verticesGroup.split(";");
+
+			sites = []
+			for (group of verticesGroup)
+			{
+				divved = group.split(",");
+
+				fX = parseFloat(divved[0]);
+				fY = parseFloat(divved[1]);
+				if(Number.isNaN(fX) || Number.isNaN(fY))
+					throw "error 1";
+				newX = xMapper(fX);
+				newY = yMapper(fY);
+				if(Number.isNaN(newX) || Number.isNaN(newY))
+					throw "error 2";
+
+				//console.log(divved[1]);
+				//console.log("from (%d, %d) to (%d, %d)", parseFloat(divved[0]), parseFloat(divved[1]), xMapper(parseFloat(divved[0])), yMapper(parseFloat(divved[1])));
+				sites.push(new Site(newX, newY));
+			}
+
+
+			//heightCoef = (canvas.height / (maxY-minY)) * 0.95;
+			//widthCoef = (canvas.width / (maxX-minX)) * 0.95;
 			heightBuff = canvas.height * 0.025;
 			widthBuff = canvas.width * 0.025;
 
+			heightCoef = (canvas.height / (maxY * 10)) * 0.95;
+			widthCoef = (canvas.width / (maxX * 10)) * 0.95;
+
+
 			console.log(sites.length);
 			console.log("X %d-%d, Y %d-%d", minX, maxX, minY, maxY);
+
 			//func =
-			voronoi(sites, true, false, makeCoordCorrecter(heightCoef, heightBuff, minY), makeCoordCorrecter(widthCoef, widthBuff, minX), minY, maxY);
+			voronoi(sites, true, false, makeCoordCorrecter(heightCoef, heightBuff, 0), makeCoordCorrecter(widthCoef, widthBuff, 0), 0, maxY*10);
 			//$("#Test").off("click").click(func);
 
 		});
+
+		function makeMapper(a, b, c, d)
+		{
+			if(a == b)
+				throw "Zero distance map between " + a + " and " + b
+			return function(x)
+			{
+				let res = (x-a)/(b-a) * (d-c) + c
+			//	if(isNaN(res))
+			//	console.log("%f mapped to %f (%s)", x, res, res);
+				return res;
+			}
+		}
 
 		function makeCoordCorrecter(coef, buff, offset)
 		{
@@ -817,7 +917,7 @@
 			let tree = new BeachTree(queue);
 			let totTime = 10000;
 			let restorePoint;
-			let line = 0;
+			let line = minY;
 			let siteID = 1;
 
 			let firstEvent = queue.dequeue();
@@ -834,9 +934,7 @@
 					c1.fillRect(0, 0, canvas.width, canvas.height);
 					for(point of sites)
 					{
-
 						c1.fillStyle = "#000000";
-
 						c1.beginPath();
 						c1.arc(wCorrecter(point.x), hCorrecter(point.y), 5, 0, 2 * Math.PI, false);
 						c1.fill();
@@ -845,7 +943,7 @@
 				}
 				let shouldStep = true;
 				c1.putImageData(restorePoint, 0, 0);
-				while(queue.length > 0 && ((queue.peek().y < line && !step) || (step && shouldStep)))
+				while(queue.length > 0 && ((queue.peek().y <= line && !step) || (step && shouldStep)))
 				{
 					let event = queue.dequeue();
 					if(step)
@@ -897,6 +995,11 @@
 					{
 						window.requestAnimationFrame(newDraw);
 					}
+					else if(queue.length > 0)
+					{
+						line = queue.peek().y;
+						window.requestAnimationFrame(newDraw);
+					}
 				}
 			};
 			if(draw)
@@ -923,7 +1026,17 @@
 		}
 
 		$("#Special").click(function(){
-			voronoi(testSites(), true, false, makeCoordCorrecter(0.5, 0, -canvas.height/2), makeCoordCorrecter(0.5 ,0, -canvas.height/2), 0, 2*canvas.height);
+			mapper = makeMapper(0, 800, 0, 1400);
+			coef = 800/1400;
+			sites = testSites();
+			for (site of sites)
+			{
+				console.log("From %d %d", site.x, site.y);
+				site.x = mapper(site.x);
+				site.y = mapper(site.y);
+				console.log("To %d %d", site.x, site.y);
+			}
+			voronoi(sites, true, false, makeCoordCorrecter(coef, 0, 0), makeCoordCorrecter(coef ,0, 0), 0, 1400);
 		});
 
 		$("#Fast").click(function(){
