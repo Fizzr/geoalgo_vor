@@ -56,6 +56,7 @@
 		var numBP = 1;
 		var numArch = 1;
 		var numSite = 1;
+		var dotSize = 3;
 
 
 		c1.fillStyle = "#ffffff";
@@ -153,7 +154,7 @@
 			let leftArch = arch.before;
 			let rightArch = arch.after;
 
-			console.log("Circle tripplet %d %d %d", leftArch.archID, arch.archID, rightArch.archID);
+			//console.log("Circle tripplet %d %d %d", leftArch.archID, arch.archID, rightArch.archID);
 
 			let lastRight = false;
 			funcList = [];
@@ -165,7 +166,7 @@
 					throw "Diddn't find breakpoints for circleEvent"
 					return;
 				}
-				console.log("Searching through ", currentNode.bpID);
+				//console.log("Searching through ", currentNode.bpID);
 				if(currentNode.tuple[0] == leftArch && currentNode.tuple[1] == arch)
 				{
 					if(firstBP == null)
@@ -205,7 +206,7 @@
 				{
 					lastNode = currentNode;
 					let breakX = currentNode.breakX(circleEvent.y);
-					console.log("BreakX %f EventX %f", breakX, circleEvent.x);
+					//console.log("BreakX %f EventX %f", breakX, circleEvent.x);
 					if(circleEvent.x == breakX)
 					{
 						throw "Event on top of breakpoint, undefined behaviour!"
@@ -338,15 +339,15 @@
 			}
 		}
 
-		BeachTree.prototype.draw = function(line, hCorrecter, wCorrecter)
+		BeachTree.prototype.draw = function(line, hCorrecter, wCorrecter, arches)
 		{
 			if(this.root != null)
 			{
-				this.root.draw(line, hCorrecter, wCorrecter);
+				this.root.draw(line, hCorrecter, wCorrecter, arches);
 				c1.strokeStyle = "#ff0000"
 				for (edge of this.edges)
 				{
-					console.log(edge);
+					//console.log(edge);
 					if(edge.twin.originX != null)
 					{
 						c1.beginPath();
@@ -626,7 +627,7 @@
 			return (this.rightHeight > this.leftHeight? this.rightHeight: this.leftHeight);
 		}
 
-		Breakpoint.prototype.draw = function(line, hCorrecter, wCorrecter)
+		Breakpoint.prototype.draw = function(line, hCorrecter, wCorrecter, arches)
 		{
 			let intersect = this.breakX(line);
 			let index = (this.isRightSide? 1: 0);
@@ -647,7 +648,7 @@
 			c1.fillStyle = "#FF0000";
 
 			c1.beginPath();
-			c1.arc(wCorrecter(b[0]), hCorrecter(b[1]), 5, 0, 2 * Math.PI, false);
+			c1.arc(wCorrecter(b[0]), hCorrecter(b[1]), dotSize, 0, 2 * Math.PI, false);
 			c1.fill();
 
 			c1.strokeStyle = "#ff0000";
@@ -656,8 +657,8 @@
 			c1.lineTo(wCorrecter(startB[0]), hCorrecter(startB[1]));
 			c1.stroke();
 
-			this.leftChild.draw(line, hCorrecter, wCorrecter);
-			this.rightChild.draw(line, hCorrecter, wCorrecter);
+			this.leftChild.draw(line, hCorrecter, wCorrecter, arches);
+			this.rightChild.draw(line, hCorrecter, wCorrecter, arches);
 		}
 		Breakpoint.prototype.print = function(start, end, height)
 		{
@@ -703,8 +704,9 @@
 			c2.fillStyle = "#FF0000";
 		}
 
-		Arch.prototype.draw = function(line, hCorrecter, wCorrecter)
+		Arch.prototype.draw = function(line, hCorrecter, wCorrecter, arches)
 		{
+			if(!arches) return;
 			if(this.site.y == line)
 				line = nextFloat(line);
 
@@ -966,7 +968,19 @@
 				//console.log("from (%d, %d) to (%d, %d)", parseFloat(divved[0]), parseFloat(divved[1]), xMapper(parseFloat(divved[0])), yMapper(parseFloat(divved[1])));
 				sites.push(new Site(newX, newY));
 			}
-
+			var queue = new PriorityQueue({ initialValues: sites, comparator: compareEvents });
+			cleanSites = [];
+			lastSite = queue.dequeue();
+			while(queue.length > 0)
+			{
+				site = queue.dequeue();
+				if(!((site.y == lastSite.y) && (site.x == lastSite.x)))
+				{
+					cleanSites.push(site);
+					lastSite = site;
+				}
+				else console.log("Discarded duplicate")
+			}
 
 			//heightCoef = (canvas.height / (maxY-minY)) * 0.95;
 			//widthCoef = (canvas.width / (maxX-minX)) * 0.95;
@@ -981,7 +995,7 @@
 			console.log("X %d-%d, Y %d-%d", minX, maxX, minY, maxY);
 
 			//func =
-			voronoi(sites, true, false, makeCoordCorrecter(heightCoef, heightBuff, 0), makeCoordCorrecter(widthCoef, widthBuff, 0), 0, maxY*10);
+			voronoi(cleanSites, true, false, makeCoordCorrecter(heightCoef, heightBuff, 0), makeCoordCorrecter(widthCoef, widthBuff, 0), 0, maxY*10);
 			//$("#Real").off("click").click(func);
 
 		});
@@ -1041,7 +1055,7 @@
 					{
 						c1.fillStyle = "#000000";
 						c1.beginPath();
-						c1.arc(wCorrecter(point.x), hCorrecter(point.y), 5, 0, 2 * Math.PI, false);
+						c1.arc(wCorrecter(point.x), hCorrecter(point.y), dotSize, 0, 2 * Math.PI, false);
 						c1.fill();
 					}
 					restorePoint = c1.getImageData(0, 0, canvas.width, canvas.height);
@@ -1058,19 +1072,27 @@
 					if(event instanceof Site)
 					{
 						event.siteID = siteID++;
-						tree.addSite(event);
+							tree.addSite(event);
+
 						tree.print();
 					}
 					else if(!event.falseAlarm)
 					{
-						//tree.processCircle(event);
-						tree.deepRemove(event);
+						try
+						{
+							tree.processCircle(event);
+						}
+						catch
+						{
+							console.error("failed removal")
+						}
+						//tree.deepRemove(event);
 						tree.print();
 
 						//Mid
 						c1.fillStyle = "#0000FF";
 						c1.beginPath();
-						c1.arc(wCorrecter(event.x), hCorrecter(event.eventY), 5, 0, 2 * Math.PI, false);
+						c1.arc(wCorrecter(event.x), hCorrecter(event.eventY), dotSize, 0, 2 * Math.PI, false);
 						c1.fill();
 
 						restorePoint = c1.getImageData(0, 0, canvas.width, canvas.height);
@@ -1086,7 +1108,7 @@
 					line = maxY
 				}
 
-				tree.draw(line, hCorrecter, wCorrecter);
+				tree.draw(line, hCorrecter, wCorrecter, true);
 
 				c1.strokeStyle = "#ff0000";
 				c1.beginPath();
@@ -1106,6 +1128,13 @@
 						line = queue.peek().y;
 						window.requestAnimationFrame(newDraw);
 					}
+				}
+
+				if((draw || step) && queue.length == 0)
+				{
+					console.log("last draw")
+					c1.putImageData(restorePoint, 0, 0);
+					tree.draw(line, hCorrecter, wCorrecter, false);
 				}
 			};
 			if(draw)
