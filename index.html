@@ -784,21 +784,25 @@
 		IntersectLeaf.prototype.split = function(edge, group)
 		{
 			let newLeaf = new IntersectLeaf(edge, group, this.tree, this.tree.leafID++);
-			console.log("Created %d", newLeaf.ID);
+			//console.log("Created %d", newLeaf.ID);
 			let leftLeaf = null;
 			let midLeaf = newLeaf;
 			let rightLeaf = null;
 			let newNode = null;
-			let sameLeft = false;
-			if(edge.origin == this.edge.origin)
+			let sameOriginNewRight = false;
+			let sameOrigin = edge.origin == this.edge.origin;
+			if(sameOrigin)
 			{
+				//console.log("Same origin")
 				let newXSlope = (edge.twin.origin.x - edge.origin.x) / (edge.twin.origin.y - edge.origin.y);
 				let oldXSlope = (this.edge.twin.origin.x - this.edge.origin.x) / (this.edge.twin.origin.y - this.edge.origin.y);
-				sameLeft = oldXSlope < newXSlope;
+				sameOriginNewRight = newXSlope > oldXSlope;
+				//console.log("newXSlope %f oldXSlope %f. New on right? %s", newXSlope, oldXSlope, sameOriginNewRight);
 			}
 
-			if((edge.origin.x > this.edge.getX(edge.origin.y)) || sameLeft)
+			if(((edge.origin.x > this.edge.getX(edge.origin.y)) && !sameOrigin) || sameOriginNewRight)
 			{
+				//console.log("New on right");
 				leftLeaf = this;
 				midLeaf.after = leftLeaf.after;
 				midLeaf.before = leftLeaf;
@@ -811,6 +815,7 @@
 			}
 			else
 			{
+				//console.log("New on left");
 				rightLeaf = this;
 				midLeaf.before = rightLeaf.before;
 				midLeaf.after = rightLeaf;
@@ -827,13 +832,13 @@
 
 			if(leftIntersection)
 			{
-				console.log("left intersect");
+				//console.log("left intersect involving %d and %d", leftLeaf.ID, midLeaf.ID);
 				let event = new IntersectEvent(leftIntersection[0], leftIntersection[1], leftLeaf, midLeaf);
 				this.tree.queue.queue(event);
 			}
 			if(rightIntersection)
 			{
-				console.log("right intersect");
+				//console.log("right intersect involving %d and %d", midLeaf.ID, rightLeaf.ID);
 				let event = new IntersectEvent(rightIntersection[0], rightIntersection[1], midLeaf, rightLeaf);
 				this.tree.queue.queue(event);
 			}
@@ -871,10 +876,10 @@
 		}
 		IntersectNode.prototype.removeEdge = function(edge)
 		{
-			console.log("Searching remove through %d", this.ID);
-			if((this.leftChild instanceof IntersectLeaf) && (this.leftChild.edge == edge))
+			//console.log("Searching remove through %d", this.ID);
+			if((this.leftChild instanceof IntersectLeaf) && (this.leftChild.edge.twin.origin == edge.twin.origin))
 			{
-				console.log("found in left child ID %d", this.leftChild.ID);
+				//console.log("found in left child ID %d", this.leftChild.ID);
 				this.leftChild.removed = true;
 				let left = this.leftChild.before;
 				let right = this.leftChild.after;
@@ -885,15 +890,15 @@
 					let intersect = right.edge.intersect(left.edge);
 					if(intersect)
 					{
-						conosle.log("New intersect")
+						//console.log("New intersect")
 						this.tree.queue.queue(new IntersectEvent(intersect[0], intersect[1], left, right));
 					}
 				}
 				return this.rightChild;
 			}
-			else if ((this.rightChild instanceof IntersectLeaf) && (this.rightChild.edge == edge))
+			else if ((this.rightChild instanceof IntersectLeaf) && (this.rightChild.edge.twin.origin == edge.twin.origin))
 			{
-				console.log("found in right child, ID %d", this.rightChild.ID);
+				//console.log("found in right child, ID %d", this.rightChild.ID);
 				this.rightChild.removed = true;
 				let left = this.rightChild.before;
 				let right = this.rightChild.after;
@@ -901,11 +906,11 @@
 				if(right)right.before = left;
 				if((left != null) && (right != null))
 				{
-					console.log(left, right);
+					//console.log(left, right);
 					let intersect = right.edge.intersect(left.edge);
 					if(intersect)
 					{
-						conosle.log("New intersect")
+						//console.log("New intersect")
 						this.tree.queue.queue(new IntersectEvent(intersect[0], intersect[1], left, right));
 					}
 				}
@@ -918,8 +923,14 @@
 					let res = this.leftChild.removeEdge(edge);
 					if(res)
 					{
+						//console.log("replacing leftChild in %d after remove", this.ID);
+						//console.log(res);
 						this.leftChild = res;
 						this.leftChild.parent = this;
+						let leftRightest = this.leftChild;
+						while(!(leftRightest instanceof IntersectLeaf))
+							leftRightest = leftRightest.rightChild;
+						this.rightInLeft = leftRightest;
 					}
 					this.leftHeight = this.leftChild.getBiggestHeight()+1;
 					return null;
@@ -929,6 +940,7 @@
 					let res = this.rightChild.removeEdge(edge);
 					if(res)
 					{
+						//console.log("replacing rightChild in %d after remove", this.ID);
 						this.rightChild = res;
 						this.rightChild.parent = this;
 						let rightest = res;
@@ -943,7 +955,9 @@
 		}
 		IntersectNode.prototype.addEdge = function(edge, group)
 		{
-			let goingRight = edge.origin.x > this.rightInLeft.edge.getX(edge.origin.y);
+			let sharedOrigin = edge.origin == this.rightInLeft.edge.origin;
+			//console.log("%s shared origin at %d", (sharedOrigin ? "has" : "not"), this.ID);
+			let goingRight = (!(sharedOrigin)) && (edge.origin.x > this.rightInLeft.edge.getX(edge.origin.y));
 			let child = (goingRight ? this.rightChild : this.leftChild);
 			let rightMost = null;
 			if(child instanceof IntersectLeaf)
@@ -1061,7 +1075,7 @@
 		}
 		function cutEdge(cutLeaf)
 		{
-			console.log("Cutting %d", cutLeaf.ID);
+			//console.log("Cutting %d", cutLeaf.ID);
 			let other;
 			let pa = cutLeaf.parent;
 			let onRightSide = pa.rightChild == cutLeaf;
@@ -1088,12 +1102,12 @@
 			let right = cutLeaf.after;
 			if(left != null)
 			{
-				console.log("left ", left);
+				//console.log("left ", left);
 				left.after = right;
 			}
 			if(right != null)
 			{
-				console.log("right", right);
+				//console.log("right", right);
 				right.before = left;
 			}
 			cutLeaf.removed = true;
@@ -1102,7 +1116,7 @@
 				let intersect = right.edge.intersect(left.edge);
 				if(intersect)
 				{
-					conosle.log("New intersect after cut")
+					//console.log("New intersect after cut")
 					right.tree.queue.queue(new IntersectEvent(intersect[0], intersect[1], left, right));
 				}
 			}
@@ -1160,7 +1174,7 @@
 					if(this.root.edge == remove)
 					{
 						this.root = null;
-						console.log("Found remove in root");
+						//console.log("Found remove in root");
 					}
 					else
 						throw "Could not find edge for removal"
@@ -1172,7 +1186,7 @@
 				}
 				if(step)
 				{
-					console.log("reprint")
+					//console.log("reprint")
 					this.print(vertexEvent.y);
 				}
 			}
@@ -1181,7 +1195,7 @@
 				if(this.root == null)
 				{
 					this.root = new IntersectLeaf(add, vertexEvent.group, this, this.leafID++);
-					console.log("Created %d", this.root.ID);
+					//console.log("Created %d", this.root.ID);
 				}
 				else if(this.root instanceof IntersectLeaf)
 				{
@@ -1193,7 +1207,7 @@
 				}
 				if(step)
 				{
-					console.log("reprint")
+					//console.log("reprint")
 					this.print(vertexEvent.y);
 				}
 
@@ -1210,12 +1224,12 @@
 			let right = intersectEvent.rightLeaf;
 			if(left.removed || right.removed)
 			{
-				console.log("Already removed");
+				//console.log("Already removed");
 				return;
 			}
 			if((left.before == right) && (right.after == left))
 			{
-				console.log("Swap already in place")
+				//console.log("Swap already in place")
 				return;
 			}
 
@@ -1673,7 +1687,6 @@
 					if((edge.origin == null) && (edge.twin.origin == null))
 						nullBoth++;
 				}
-				console.error("Check num vertices and edges and see if they add upp (there's formula!)");
 				tree.closeEdges();
 				return [tree.vertices, tree.edges];
 			}
@@ -1681,12 +1694,9 @@
 
 		function lineIntersect(primaryGroup, secondaryGroup, draw, step, xCorr, yCorr, minY, maxY)
 		{
-			console.log(primaryGroup);
-			console.log(secondaryGroup);
-			console.log(minY);
 			var queue = new PriorityQueue({comparator: compareEvents });
 			let tree = new IntersectTree(queue);
-			let line = 0;
+			let line = minY;
 			let totTime = 10000;
 			let start = null;
 			let timeDiff;
@@ -1704,17 +1714,16 @@
 				if(draw)
 				{
 					if(!start) start = timestep;
-					timeDiff = timestep - start;
-					line = minY + (maxY-minY) * (timeDiff/totTime)
 				}
+				clearCanvas(c1);
 
 				let shouldStep = true;
 				while(queue.length > 0 && ((queue.peek().y <= line && !step) || (step && shouldStep)))
 				{
 					k++;
 					event = queue.dequeue();
-					console.log("k", k);
-					console.log(event);
+					//console.log("k", k);
+					//console.log(event);
 					if(event instanceof VertexEvent)
 					{
 						try
@@ -1728,11 +1737,9 @@
 					}
 					else
 					{
-						console.log("Got some intersections yo!");
 						tree.processIntersect(event);
 					}
 					shouldStep = false;
-					clearCanvas(c1);
 					if(step)
 					{
 						tree.draw(xCorr, yCorr);
@@ -1763,10 +1770,23 @@
 
 				tree.print(line);
 
-				if(draw && (timeDiff < totTime))
+				if(draw)
 				{
-					window.requestAnimationFrame(drawer);
+					timeDiff = timestep - start;
+					if((timeDiff < totTime))
+					{
+						line = minY + (maxY-minY) * (timeDiff/totTime)
+						window.requestAnimationFrame(drawer);
+					}
+					else if(queue.length > 0)
+					{
+						line = queue.peek().y;
+						window.requestAnimationFrame(drawer);
+					}
+					else
+						console.log("done");
 				}
+
 			}
 			if(draw)
 				window.requestAnimationFrame(drawer);
@@ -1852,15 +1872,15 @@
 			heightBuff = canvas.height * 0.025;
 			widthBuff = canvas.width * 0.025;
 
-			let xCorr = makeCoordCorrecter(widthCoef*6, widthBuff, minX+60);
-			let yCorr = makeCoordCorrecter(heightCoef*6, heightBuff, minY-20);
+			let xCorr = makeCoordCorrecter(widthCoef, widthBuff, minX);
+			let yCorr = makeCoordCorrecter(heightCoef, heightBuff, minY);
 
 			let map = getMapEdgeList();
 
 			return [[map[0], map[1]], vor, draw, step, xCorr, yCorr, minY, maxY]
 		}
 
-		$("#Test").click(function()
+		$("#Cut").click(function()
 		{
 			//lineIntersect.apply(this, testCuts(true, false));
 
@@ -1872,50 +1892,11 @@
 			//let res = lineIntersect.apply(this, testCuts(false, true));
 			let res = lineIntersect.apply(this, realCuts(false, true));
 			$("#CutStep").off("click").click(res);
-		});
 
-		$("#Cut").click(function()
-		{
-			let minmax = getMinMax();
-			let minX = minmax[0][0];
-			let maxX = minmax[0][1];
-			let minY = minmax[1][0];
-			let maxY = minmax[1][1];
-
-			heightCoef = (canvas.height / (maxY-minY)) * 0.95;
-			widthCoef = (canvas.width / (maxX-minX)) * 0.95;
-			heightBuff = canvas.height * 0.025;
-			widthBuff = canvas.width * 0.025;
-
-			let xCorr = makeCoordCorrecter(widthCoef, widthBuff, minX);
-			let yCorr = makeCoordCorrecter(heightCoef, heightBuff, minY);
-
-			let mapVertEdge = getMapEdgeList();
-			let edges = mapVertEdge[1];
-			clearCanvas(c1);
-			c1.strokeStyle = "#000000";
-			for (edge of edges)
+			for(let i = 0; i < 1300; i++)
 			{
-				c1.beginPath();
-				c1.moveTo(xCorr(edge.origin.x), yCorr(edge.origin.y));
-				c1.lineTo(xCorr(edge.twin.origin.x), yCorr(edge.twin.origin.y));
-				c1.stroke();
+				res();
 			}
-			clearCanvas(c2);
-			c2.strokeStyle = "#000000";
-			for(pair of mapVertEdge[2])
-			{
-				let edge = pair[0].edge;
-				while(edge != null)
-				{
-					c2.beginPath();
-					c2.moveTo(xCorr(edge.origin.x), yCorr(edge.origin.y));
-					c2.lineTo(xCorr(edge.twin.origin.x), yCorr(edge.twin.origin.y));
-					c2.stroke();
-					edge = edge.next;
-				}
-			}
-
 		});
 
 		$("#Special").click(function()
@@ -2333,7 +2314,7 @@
 				{
 					if((edge.origin.x == edge.twin.origin.x) && (edge.origin.y == edge.twin.origin.y))
 					{
-						console.log("Duplicate internal");
+						//console.log("Duplicate internal");
 						let before = edge.prev;
 						let after = edge.next;
 						before.next = after;
@@ -2372,7 +2353,7 @@
 			}
 
 			//Clear duplicates endings
-			console.log(pairs.length);
+			//console.log(pairs.length);
 			for(let i = 0; i < pairs.length; i++)
 			{
 				for(let j = i+1; j < pairs.length; j++)
@@ -2383,8 +2364,8 @@
 						let end2 = pairs[j][comb[1]];
 						if((end1.x == end2.x) && (end1.y == end2.y))
 						{
-							console.log("Duplicate endings x %f y %f", end1.x, end1.y);
-							console.log("ends\n", end1, end2);
+							//console.log("Duplicate endings x %f y %f", end1.x, end1.y);
+							//console.log("ends\n", end1, end2);
 							e1 = end1.edge;
 							e2 = end2.edge;
 
@@ -2396,18 +2377,18 @@
 
 							e2.origin = e1.origin;
 							end2.edge = null;
-							console.log("original pairs\n[%o, %o]\n[%o, %o]", pairs[i][0], pairs[i][1], pairs[j][0], pairs[j][1]);
+							//console.log("original pairs\n[%o, %o]\n[%o, %o]", pairs[i][0], pairs[i][1], pairs[j][0], pairs[j][1]);
 							let secondOther = (comb[1] == 1 ? 0 : 1);
 							pairs[i][comb[0]] = pairs[j][secondOther];
 							pairs.splice(j, 1);
-							console.log("new pair\n%o", pairs[i]);
+							//console.log("new pair\n%o", pairs[i]);
 							j = i+1;
 							break;
 						}
 					}
 				}
 			}
-			console.log(pairs.length);
+			//console.log(pairs.length);
 
 			return [vertices, edges, pairs];
 		}
