@@ -55,8 +55,8 @@
 
 		canvas.width = canvasWidth;
 		canvas.height = canvasHeight;
-		canvas2.width = canvasWidth;
-		canvas2.height = canvasHeight;
+		canvas2.width = canvasWidth*2;
+		canvas2.height = canvasHeight*2;
 
 		const c1 = canvas.getContext("2d");
 		const c2 = canvas2.getContext("2d");
@@ -214,6 +214,8 @@
 			this.rightChild = rightLeaf;
 			this.ID = ID;
 			this.parent = parent;
+			this.rightHeight = 1;
+			this.leftHeight = 1;
 		}
 
 		function IntersectLeaf(edge, group, tree, ID)
@@ -231,6 +233,16 @@
 		Breakpoint.prototype = Object.create(BeachNode.prototype);
 		Arch.prototype = Object.create(BeachNode.prototype);
 
+		function decFunc(node, rightSide)
+		{
+			return function()
+			{
+				if(rightSide)
+				node.rightHeight--;
+				else
+				node.leftHeight--;
+			}
+		}
 		BeachTree.prototype.addSite = function(site)
 		{
 			if(!site instanceof Site)
@@ -253,18 +265,6 @@
 				}
 			}
 		}
-
-		function decFunc(node, rightSide)
-		{
-			return function()
-			{
-				if(rightSide)
-				node.rightHeight--;
-				else
-				node.leftHeight--;
-			}
-		}
-
 		BeachTree.prototype.processCircle = function(circleEvent)
 		{
 			if(!this.root instanceof Breakpoint)
@@ -486,7 +486,6 @@
 				}
 			}
 		}
-
 		BeachTree.prototype.closeEdges = function()
 		{
 			if(this.root && (this.root instanceof Breakpoint))
@@ -622,7 +621,7 @@
 		Breakpoint.prototype.print = function(start, end, height)
 		{
 			let stdHeightDiff = 50;
-			let botToAr = 35;
+			let topToBotArr = 35;
 			let ArToTxt = 20;
 			c2.fillStyle = "#FF0000";
 			c2.font = "12px Arial";
@@ -638,12 +637,12 @@
 
 			c2.strokeStyle = "#000000";
 			c2.beginPath();
-			c2.moveTo(mid, height+botToAr);
+			c2.moveTo(mid, height+topToBotArr);
 			c2.lineTo(start + (leftPartition)/2, height+stdHeightDiff);
 			c2.stroke();
 
 			c2.beginPath();
-			c2.moveTo(mid, height+botToAr);
+			c2.moveTo(mid, height+topToBotArr);
 			c2.lineTo(start+leftPartition + (end-(start+leftPartition))/2, height+stdHeightDiff);
 			c2.stroke();
 
@@ -662,7 +661,6 @@
 			c2.fillText(this.site.siteID, mid, height+15);
 			c2.fillStyle = "#FF0000";
 		}
-
 		Arch.prototype.draw = function(line, xCorr, yCorr, arches)
 		{
 			if(!arches) return;
@@ -707,7 +705,6 @@
 
 			return [negX, posX];
 		}
-
 		Site.prototype.getMidY = function (line)
 		{
 			if(this.y == line)
@@ -719,7 +716,6 @@
 
 			return (1/(2*(b-l)))*(Math.pow(x,2)-2*a*x+Math.pow(a,2)+Math.pow(b,2)-Math.pow(l,2));
 		}
-
 		Site.prototype.getY = function (line, x)
 		{
 			if(this.y == line)
@@ -741,7 +737,6 @@
 			let m = this.origin.y - k * this.origin.x;
 			return (y-m)/k;
 		}
-
 		Edge.prototype.intersect = function(otherEdge)
 		{
 			if(otherEdge == null)
@@ -774,7 +769,6 @@
 			}
 
 		}
-
 		Edge.prototype.draw = function(ctx, xCorr, yCorr, col)
 		{
 			if(this.origin && this.twin.origin)
@@ -795,14 +789,22 @@
 			let midLeaf = newLeaf;
 			let rightLeaf = null;
 			let newNode = null;
+			let sameLeft = false;
+			if(edge.origin == this.edge.origin)
+			{
+				let newXSlope = (edge.twin.origin.x - edge.origin.x) / (edge.twin.origin.y - edge.origin.y);
+				let oldXSlope = (this.edge.twin.origin.x - this.edge.origin.x) / (this.edge.twin.origin.y - this.edge.origin.y);
+				sameLeft = oldXSlope < newXSlope;
+			}
 
-			if((edge.origin.x > this.edge.getX(edge.origin.y)) || ((edge.origin == this.edge.origin) && (edge.twin.origin.x > this.edge.twin.origin.x )))
+			if((edge.origin.x > this.edge.getX(edge.origin.y)) || sameLeft)
 			{
 				leftLeaf = this;
 				midLeaf.after = leftLeaf.after;
 				midLeaf.before = leftLeaf;
 				leftLeaf.after = midLeaf;
 				rightLeaf = midLeaf.after;
+				if(rightLeaf) rightLeaf.before = midLeaf;
 				newNode = new IntersectNode(leftLeaf, midLeaf, this.tree, this.tree.nodeID++, this.parent);
 				midLeaf.parent = newNode;
 				leftLeaf.parent = newNode;
@@ -814,6 +816,7 @@
 				midLeaf.after = rightLeaf;
 				rightLeaf.before = midLeaf;
 				leftLeaf = midLeaf.before;
+				if(leftLeaf) leftLeaf.after = midLeaf;
 				newNode = new IntersectNode(midLeaf, rightLeaf, this.tree, this.tree.nodeID++, this.parent);
 				midLeaf.parent = newNode;
 				rightLeaf.parent = newNode;
@@ -836,7 +839,6 @@
 			}
 			return newNode;
 		}
-
 		IntersectLeaf.prototype.print = function(start, end, height, y)
 		{
 			c2.fillStyle = "#0000FF";
@@ -845,42 +847,100 @@
 			let mid = start + (end-start)/2;
 			c2.fillText(this.ID, mid, height);
 			c2.fillStyle = "#00BB00";
-			c2.fillText(this.edge.getX(y), mid, height+15);
+			c2.fillText(this.edge.getX(y).toFixed(2), mid, height+15);
+			c2.fillStyle = "#000000";
+			c2.fillText((this.before ? this.before.ID : "null") + " | " + (this.after ? this.after.ID : "null"), mid, height+30);
+
+		}
+		IntersectLeaf.prototype.getBiggestHeight = function()
+		{
+			return 0;
+		}
+		IntersectLeaf.prototype.draw = function(xCorr, yCorr)
+		{
+			let dx = this.edge.twin.origin.x - this.edge.origin.x;
+			let dy = this.edge.twin.origin.y - this.edge.origin.y;
+			c1.fillStyle = "#000000"
+			c1.font = "12px Arial";
+			c1.fillText(this.ID, xCorr(this.edge.origin.x + dx/2), yCorr(this.edge.origin.y + dy/2));
 		}
 
+		IntersectNode.prototype.getBiggestHeight = function()
+		{
+			return (this.rightHeight > this.leftHeight ? this.rightHeight : this.leftHeight);
+		}
 		IntersectNode.prototype.removeEdge = function(edge)
 		{
 			console.log("Searching remove through %d", this.ID);
 			if((this.leftChild instanceof IntersectLeaf) && (this.leftChild.edge == edge))
 			{
-				console.log("found in left child")
+				console.log("found in left child ID %d", this.leftChild.ID);
 				this.leftChild.removed = true;
+				let left = this.leftChild.before;
+				let right = this.leftChild.after;
+				if(left) left.after = right;
+				if(right)right.before = left;
+				if(left && right)
+				{
+					let intersect = right.edge.intersect(left.edge);
+					if(intersect)
+					{
+						conosle.log("New intersect")
+						this.tree.queue.queue(new IntersectEvent(intersect[0], intersect[1], left, right));
+					}
+				}
 				return this.rightChild;
 			}
 			else if ((this.rightChild instanceof IntersectLeaf) && (this.rightChild.edge == edge))
 			{
-				console.log("found in right child")
+				console.log("found in right child, ID %d", this.rightChild.ID);
 				this.rightChild.removed = true;
+				let left = this.rightChild.before;
+				let right = this.rightChild.after;
+				if(left) left.after = right;
+				if(right)right.before = left;
+				if((left != null) && (right != null))
+				{
+					console.log(left, right);
+					let intersect = right.edge.intersect(left.edge);
+					if(intersect)
+					{
+						conosle.log("New intersect")
+						this.tree.queue.queue(new IntersectEvent(intersect[0], intersect[1], left, right));
+					}
+				}
 				return this.leftChild;
 			}
 			else
 			{
-				console.log((this.rightInLeft.edge == edge))
-				if((this.rightInLeft.edge == edge) || (this.rightInLeft.edge.getX(edge.twin.origin.y) > edge.twin.origin.x))
+				if((this.rightInLeft.edge.twin.origin == edge.twin.origin) || (this.rightInLeft.edge.getX(edge.twin.origin.y) > edge.twin.origin.x))
 				{
 					let res = this.leftChild.removeEdge(edge);
-					if(res) this.leftChild = res;
+					if(res)
+					{
+						this.leftChild = res;
+						this.leftChild.parent = this;
+					}
+					this.leftHeight = this.leftChild.getBiggestHeight()+1;
 					return null;
 				}
 				else
 				{
 					let res = this.rightChild.removeEdge(edge);
-					if(res) this.rightChild = res;
+					if(res)
+					{
+						this.rightChild = res;
+						this.rightChild.parent = this;
+						let rightest = res;
+						while(!(rightest instanceof IntersectLeaf))
+							rightest = rightest.rightChild;
+						propogateRightInLeft(rightest);
+					}
+					this.rightHeight = this.rightChild.getBiggestHeight()+1;
 					return null;
 				}
 			}
 		}
-
 		IntersectNode.prototype.addEdge = function(edge, group)
 		{
 			let goingRight = edge.origin.x > this.rightInLeft.edge.getX(edge.origin.y);
@@ -892,11 +952,13 @@
 				if (goingRight)
 				{
 					this.rightChild = newNode;
+					this.rightHeight = 2;
 					return newNode.rightChild;
 				}
 				else
 				{
 					this.leftChild = newNode;
+					this.leftHeight = 2;
 					this.rightInLeft = newNode.rightChild;
 					return null;
 				}
@@ -906,51 +968,161 @@
 				let res = child.addEdge(edge, group);
 				if(goingRight)
 				{
+					this.rightHeight = this.rightChild.getBiggestHeight()+1;
 					return res;
 				}
 				else
 				{
+					this.leftHeight = this.leftChild.getBiggestHeight()+1;
 					if(res != null)
 						this.rightInLeft = res
 					return null;
 				}
 			}
 		}
-
 		IntersectNode.prototype.print = function(start, end, height, y)
 		{
 			let stdHeightDiff = 50;
-			let botToAr = 30;
-			let ArToTxt = 20;
+			let level = height;
+			let fontSize = 12;
+			let rowSize = fontSize + 3;
+			let topToBotArr = 45;
 			c2.fillStyle = "#FF0000";
-			c2.font = "12px Arial";
+			c2.font = fontSize+"px Arial";
 			c2.textAlign = "center"
 			let mid = start + (end-start)/2;
-			c2.fillText(this.ID, mid, height);
+			c2.fillText(this.ID, mid, level);
+			level+= rowSize;
 			c2.fillStyle = "#0000FF";
-			c2.fillText(this.rightInLeft.ID, mid, height+15);
-
-			//let ratio = this.leftHeight/(this.leftHeight+this.rightHeight);
-			let ratio = 0.5;
+			c2.fillText(this.rightInLeft.ID, mid, level);
+			level+= rowSize;
+			c2.fillStyle = "#000000";
+			c2.fillText(this.leftHeight + " h " + this.rightHeight, mid, level);
+			level+= rowSize;
+			c2.fillStyle = "#00FF00";
+			c2.fillText(this.rightInLeft.edge.getX(y).toFixed(10), mid, level);
+			level+= 3;
+			let ratio = this.leftHeight/(this.leftHeight+this.rightHeight);
+			//let ratio = 0.5;
 			let leftPartition = (end-start) * ratio;
 
 			c2.strokeStyle = "#000000";
 			c2.beginPath();
-			c2.moveTo(mid, height+botToAr);
-			c2.lineTo(start + (leftPartition)/2, height+stdHeightDiff);
+			c2.moveTo(mid, level);
+			c2.lineTo(start + (leftPartition)/2, level+stdHeightDiff-rowSize);
 			c2.stroke();
 
 			c2.beginPath();
-			c2.moveTo(mid, height+botToAr);
-			c2.lineTo(start+leftPartition + (end-(start+leftPartition))/2, height+stdHeightDiff);
+			c2.moveTo(mid, level);
+			c2.lineTo(start+leftPartition + (end-(start+leftPartition))/2, level+stdHeightDiff-rowSize);
 			c2.stroke();
 
-			this.leftChild.print(start, start+leftPartition, height+stdHeightDiff+ArToTxt, y);
-			this.rightChild.print(start+leftPartition, end, height+stdHeightDiff+ArToTxt, y);
+			this.leftChild.print(start, start+leftPartition, level+stdHeightDiff, y);
+			this.rightChild.print(start+leftPartition, end, level+stdHeightDiff, y);
 
 		}
+		IntersectNode.prototype.draw = function(xCorr, yCorr)
+		{
+			this.rightChild.draw(xCorr, yCorr);
+			this.leftChild.draw(xCorr, yCorr);
+		}
 
-		IntersectTree.prototype.processVertex = function(vertexEvent)
+		function propogateRightInLeft(leaf)
+		{
+			let curr = leaf.parent;
+			let child = leaf;
+			while(curr)
+			{
+				if(curr.rightChild == child)
+				{
+					child = curr;
+					curr = curr.parent;
+				}
+				else
+				{
+					curr.rightInLeft = leaf;
+					break;
+				}
+			}
+		}
+		function propogateHeight(leaf)
+		{
+			let curr = leaf.parent;
+			let child = leaf;
+			while(curr)
+			{
+				if(curr.rightChild == child)
+					curr.rightHeight = child.getBiggestHeight()+1;
+				else
+					curr.leftHeight = child.getBiggestHeight()+1;
+				child = curr;
+				curr = curr.parent;
+			}
+		}
+		function cutEdge(cutLeaf)
+		{
+			console.log("Cutting %d", cutLeaf.ID);
+			let other;
+			let pa = cutLeaf.parent;
+			let onRightSide = pa.rightChild == cutLeaf;
+			let gran = pa.parent;
+			if(onRightSide)
+				other = pa.leftChild;
+			else other = pa.rightChild;
+
+			if(gran.rightChild == pa)
+			gran.rightChild = other;
+			else gran.leftChild = other;
+			other.parent = gran;
+
+			if(onRightSide)
+			{
+				let otherRight = other;
+				while(!(otherRight instanceof IntersectLeaf))
+					otherRight = otherRight.rightChild;
+
+				propogateRightInLeft(otherRight);
+			}
+			propogateHeight(other);
+			let left = cutLeaf.before;
+			let right = cutLeaf.after;
+			if(left != null)
+			{
+				console.log("left ", left);
+				left.after = right;
+			}
+			if(right != null)
+			{
+				console.log("right", right);
+				right.before = left;
+			}
+			cutLeaf.removed = true;
+			if(left && right)
+			{
+				let intersect = right.edge.intersect(left.edge);
+				if(intersect)
+				{
+					conosle.log("New intersect after cut")
+					right.tree.queue.queue(new IntersectEvent(intersect[0], intersect[1], left, right));
+				}
+			}
+
+			let v1 = cutLeaf.edge.origin;
+			let v2 = cutLeaf.edge.twin.origin;
+			v1.edge = cutLeaf.edge.twin.next;
+			v2.edge = cutLeaf.edge.next;
+
+			cutLeaf.edge.prev.next = cutLeaf.edge.twin.next;
+			cutLeaf.edge.next.prev = cutLeaf.edge.twin.prev;
+
+			cutLeaf.edge.twin.prev.next = cutLeaf.edge.next;
+			cutLeaf.edge.twin.next.prev = cutLeaf.edge.prev;
+
+			cutLeaf.edge.origin = null;
+			cutLeaf.edge.twin.origin = null;
+
+		}
+		IntersectTree.prototype.processVertex = function(vertexEvent, step)
 		{
 			let removeEdges = [];
 			let addEdges = [];
@@ -998,6 +1170,11 @@
 					let res = this.root.removeEdge(remove);
 					if(res) this.root = res;
 				}
+				if(step)
+				{
+					console.log("reprint")
+					this.print(vertexEvent.y);
+				}
 			}
 			for(add of addEdges)
 			{
@@ -1014,59 +1191,15 @@
 				{
 					this.root.addEdge(add, vertexEvent.group);
 				}
+				if(step)
+				{
+					console.log("reprint")
+					this.print(vertexEvent.y);
+				}
+
 			}
 
 		}
-
-		function propogateRightInLeft(leaf)
-		{
-			let curr = leaf.parent;
-			let child = leaf;
-			while(curr)
-			{
-				if(curr.rightChild == child)
-				{
-					child = curr;
-					curr = curr.parent;
-				}
-				else
-				{
-					curr.rightInLeft = leaf;
-					break;
-				}
-			}
-		}
-
-		function cutEdge(cutLeaf)
-		{
-			let other;
-			let pa = cutLeaf.parent;
-			let gran = pa.parent;
-			if(pa.rightChild == cutLeaf)
-				other = pa.leftChild;
-			else other = pa.rightChild;
-
-			if(gran.rightChild == pa)
-				gran.rightChild = other;
-			else gran.leftChild = other;
-
-			let left = cutLeaf.before;
-			let right = cutLeaf.after;
-			if(left)
-				left.after = right;
-			if(right)
-				right.before = left;
-			cutLeaf.removed = true;
-
-			let v1 = cutLeaf.edge.origin;
-			let v2 = cutLeaf.edge.twin.origin;
-			v1.edge = cutLeaf.edge.twin.next;
-			v2.edge = cutLeaf.edge.next;
-
-			cutLeaf.edge.origin = null;
-			cutLeaf.edge.twin.origin = null;
-		}
-
 		IntersectTree.prototype.processIntersect = function(intersectEvent)
 		{
 			if((this.root == null) || (this.root instanceof IntersectLeaf))
@@ -1091,6 +1224,7 @@
 				if(left.group < right.group)
 					cutEdge(right);
 				else cutEdge(left);
+
 			}
 			else
 			{
@@ -1114,9 +1248,11 @@
 
 				propogateRightInLeft(left);
 				propogateRightInLeft(right);
+				propogateHeight(left);
+				propogateHeight(right);
+				console.error("Check new interections!");
 			}
 		}
-
 		IntersectTree.prototype.print = function(y)
 		{
 			clearCanvas(c2);
@@ -1124,6 +1260,11 @@
 			{
 				this.root.print(0, c2.canvas.clientWidth, 50, y);
 			}
+		}
+		IntersectTree.prototype.draw = function(xCorr, yCorr)
+		{
+			if(this.root)
+			this.root.draw(xCorr, yCorr);
 		}
 
 		function findArchIntersect(leftSite, rightSite, line, log)
@@ -1534,7 +1675,6 @@
 				}
 				console.error("Check num vertices and edges and see if they add upp (there's formula!)");
 				tree.closeEdges();
-				tree.print();
 				return [tree.vertices, tree.edges];
 			}
 		}
@@ -1543,6 +1683,7 @@
 		{
 			console.log(primaryGroup);
 			console.log(secondaryGroup);
+			console.log(minY);
 			var queue = new PriorityQueue({comparator: compareEvents });
 			let tree = new IntersectTree(queue);
 			let line = 0;
@@ -1566,7 +1707,45 @@
 					timeDiff = timestep - start;
 					line = minY + (maxY-minY) * (timeDiff/totTime)
 				}
-				clearCanvas(c1);
+
+				let shouldStep = true;
+				while(queue.length > 0 && ((queue.peek().y <= line && !step) || (step && shouldStep)))
+				{
+					k++;
+					event = queue.dequeue();
+					console.log("k", k);
+					console.log(event);
+					if(event instanceof VertexEvent)
+					{
+						try
+						{
+							tree.processVertex(event, step);
+						}
+						catch(err)
+						{
+							console.error(err);
+						}
+					}
+					else
+					{
+						console.log("Got some intersections yo!");
+						tree.processIntersect(event);
+					}
+					shouldStep = false;
+					clearCanvas(c1);
+					if(step)
+					{
+						tree.draw(xCorr, yCorr);
+						c1.fillStyle = "#000000"
+						line = event.y;
+						c1.beginPath();
+						c1.arc(xCorr(event.x), yCorr(event.y), dotSize, 0, 2 * Math.PI, false);
+						c1.fill();
+
+					}
+					tree.print(event.y);
+				}
+
 				for(edge of primaryGroup[1])
 				{
 					edge.draw(c1, xCorr, yCorr, "#000000");
@@ -1576,34 +1755,10 @@
 					edge.draw(c1, xCorr, yCorr, "#FF0000");
 				}
 
-
-				let shouldStep = true;
-				while(queue.length > 0 && ((queue.peek().y <= line && !step) || (step && shouldStep)))
-				{
-					k++;
-					event = queue.dequeue();
-					console.log("k", k);
-					console.log(event);
-					if(step)
-					{
-						line = event.y;
-					}
-					if(event instanceof VertexEvent)
-					{
-						tree.processVertex(event);
-					}
-					else
-					{
-						console.log("Got some intersections yo!");
-						tree.processIntersect(event);
-					}
-					shouldStep = false;
-				}
-
 				c1.strokeStyle = "#000000";
 				c1.beginPath();
-				c1.moveTo(0, line);
-				c1.lineTo(canvasWidth, line);
+				c1.moveTo(0, yCorr(line));
+				c1.lineTo(canvasWidth, yCorr(line));
 				c1.stroke();
 
 				tree.print(line);
@@ -1680,10 +1835,8 @@
 
 			return [prim, sec, draw, step, xCorr, yCorr, 0, 200];
 		}
-
-		$("#Test").click(function()
+		function realCuts(draw, step)
 		{
-			//lineIntersect.apply(this, testCuts(true, false));
 			let minmax = getMinMax();
 			let minX = minmax[0][0];
 			let maxX = minmax[0][1];
@@ -1699,17 +1852,25 @@
 			heightBuff = canvas.height * 0.025;
 			widthBuff = canvas.width * 0.025;
 
-			let xCorr = makeCoordCorrecter(widthCoef, widthBuff, minX);
-			let yCorr = makeCoordCorrecter(heightCoef, heightBuff, minY);
+			let xCorr = makeCoordCorrecter(widthCoef*6, widthBuff, minX+60);
+			let yCorr = makeCoordCorrecter(heightCoef*6, heightBuff, minY-20);
 
 			let map = getMapEdgeList();
 
-			lineIntersect([map[0], map[1]], vor, true, false, xCorr, yCorr, minY, maxY);
+			return [[map[0], map[1]], vor, draw, step, xCorr, yCorr, minY, maxY]
+		}
+
+		$("#Test").click(function()
+		{
+			//lineIntersect.apply(this, testCuts(true, false));
+
+			lineIntersect.apply(this, realCuts(true, false));
 		});
 
 		$("#CutStep").click(function()
 		{
-			let res = lineIntersect.apply(this, testCuts(false, true));
+			//let res = lineIntersect.apply(this, testCuts(false, true));
+			let res = lineIntersect.apply(this, realCuts(false, true));
 			$("#CutStep").off("click").click(res);
 		});
 
@@ -2093,6 +2254,7 @@
 				vertices.push(new Vertex(raw[0], raw[1]));
 			}
 
+			//Connecting edges to vertices.
 			for (face of faces)
 			{
 				if (face.length !== 2) {continue};
@@ -2104,18 +2266,29 @@
 				let Ev2v1 = new Edge(v2, Ev1v2);
 				Ev1v2.twin = Ev2v1;
 				edges.push(Ev1v2);
-				for(e of [Ev1v2, Ev2v1])
+				if(v1.edge == null)
 				{
-					if(e.origin.edge == null)
-					{
-						e.origin.edge = e;
-					}
-					else
-					{
-						e.origin.edge.twin.next = e;
-						e.origin.edge.prev = e.twin;
-					}
+					v1.edge = Ev1v2;
 				}
+				else
+				{
+					v1.edge.twin.next = Ev1v2;
+					v1.edge.prev = Ev2v1;
+					Ev2v1.next = v1.edge;
+					Ev1v2.prev = v1.edge.twin;
+				}
+				if(v2.edge == null)
+				{
+					v2.edge = Ev2v1;
+				}
+				else
+				{
+					v2.edge.twin.next = Ev2v1;
+					v2.edge.prev = Ev1v2;
+					Ev1v2.next = v2.edge;
+					Ev2v1.prev = v2.edge.twin;
+				}
+
 			}
 			//Find disjoint sets
 			let endings = [];
@@ -2152,6 +2325,89 @@
 				if(!found) console.error("Other end not in endings!");
 				pairs.push([ending, otherEnd]);
 			}
+			//Clear duplicate internal
+			for(pair of pairs)
+			{
+				let edge = pair[0].edge;
+				while(edge != null)
+				{
+					if((edge.origin.x == edge.twin.origin.x) && (edge.origin.y == edge.twin.origin.y))
+					{
+						console.log("Duplicate internal");
+						let before = edge.prev;
+						let after = edge.next;
+						before.next = after;
+						after.prev = before;
+						before.twin.prev = after.twin;
+						after.twin.next = before.twin;
+						before.twin.origin = after.origin; //disregard edge.origin
+						edge.origin.edge = null;
+						edge.origin = null;
+						edge.twin.origin = null;
+					}
+					edge = edge.next;
+				}
+			}
+			//Verify chain
+			for(pair of pairs)
+			{
+				for(comb of [[0,1],[1,0]])
+				{
+					let start = pair[comb[0]];
+					let end = pair[comb[1]];
+					let curr = start.edge;
+					while(curr.next != null)
+					{
+						if((curr != start.edge) && (curr.twin.next.twin.next != curr))
+						{
+							console.error("not a line!")
+						}
+						curr = curr.next;
+					}
+					if(curr.twin.origin != end)
+					{
+						console.error("Did not reach end through chain!")
+					}
+				}
+			}
+
+			//Clear duplicates endings
+			console.log(pairs.length);
+			for(let i = 0; i < pairs.length; i++)
+			{
+				for(let j = i+1; j < pairs.length; j++)
+				{
+					for(comb of [[0,0],[0,1],[1,0],[1,1]])
+					{
+						let end1 = pairs[i][comb[0]];
+						let end2 = pairs[j][comb[1]];
+						if((end1.x == end2.x) && (end1.y == end2.y))
+						{
+							console.log("Duplicate endings x %f y %f", end1.x, end1.y);
+							console.log("ends\n", end1, end2);
+							e1 = end1.edge;
+							e2 = end2.edge;
+
+							e1.prev = e2.twin;
+							e2.twin.next = e1;
+
+							e2.prev = e1.twin;
+							e1.twin.next = e2;
+
+							e2.origin = e1.origin;
+							end2.edge = null;
+							console.log("original pairs\n[%o, %o]\n[%o, %o]", pairs[i][0], pairs[i][1], pairs[j][0], pairs[j][1]);
+							let secondOther = (comb[1] == 1 ? 0 : 1);
+							pairs[i][comb[0]] = pairs[j][secondOther];
+							pairs.splice(j, 1);
+							console.log("new pair\n%o", pairs[i]);
+							j = i+1;
+							break;
+						}
+					}
+				}
+			}
+			console.log(pairs.length);
 
 			return [vertices, edges, pairs];
 		}
