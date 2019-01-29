@@ -3,18 +3,13 @@
 	    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
 	</head>
 	<body bgcolor="#444444">
-		<button id="submitFreeInput" >Load</button>
-		<button id="mergeBtn">Merge</button>
-		<button id="drawLinesBtn">ReDraw</button>
-		<button id="LogLinesBtn">Log Lines</button>
-		<button id="Special">Special</button>
-		<button id="Fast">Fast</button>
-		<button id="Step">Step</button>
-		<button id="Real">Real</button>
-		<button id="RealStep">RealStep</button>
+		<button id="submitFreeInput">Map</button>
+		<button id="Vor">Vor</button>
+		<button id="VorStep">VorStep</button>
+		<button id="VorFast">VorFast</button>
 		<button id="Cut">Cut</button>
 		<button id="CutStep">CutStep</button>
-		<button id="Test">Test</button>
+		<button id="CutFast">CutFast</button>
 		<br>
 		<canvas id="myCanvas" style="border:1px solid #000000;"></canvas>
 		<canvas id="myCanvas2" style="border:1px solid #000000;"></canvas>
@@ -72,9 +67,6 @@
 
 		var lines = [];
 
-		var numBP = 1;
-		var numArch = 1;
-		var numSite = 1;
 		var dotSize = 3;
 
 
@@ -100,7 +92,7 @@
 		{
 			this.x = x;
 			this.y = y;
-			this.siteID = numSite++;
+			this.siteID = 0
 		}
 
 		function CircleEvent(x,y, eventY, arch)
@@ -156,30 +148,32 @@
 			this.edges = [];
 			this.vertices = [];
 			this.queue = queue;
+			this.archID = 1;
+			this.bpID = 1;
 		}
 
 		function BeachNode(){}
 
-		function Breakpoint(leftArch, rightArch, leftChild, rightChild, isRightSide, edge, queue)
+		function Breakpoint(leftArch, rightArch, leftChild, rightChild, isRightSide, edge, tree)
 		{
 			this.edge = edge;
 			this.tuple = [leftArch, rightArch];
 			this.leftChild = leftChild;
 			this.rightChild = rightChild;
 			this.isRightSide = isRightSide;
-			this.bpID = numBP++;
-			this.queue = queue;
+			this.tree = tree;
+			this.bpID = tree.bpID++;
 			this.leftHeight = 1;
 			this.rightHeight = 1;
 		}
 
-		function Arch(site)
+		function Arch(site, tree)
 		{
 			this.site = site;
 			this.circleEvent = null;
 			this.before = null;
 			this.after = null;
-			this.archID = numArch++;
+			this.archID = tree.archID;
 		}
 
 		function VertexEvent(vertex, group)
@@ -251,13 +245,13 @@
 			}
 			if(this.root == null)
 			{
-				let arch = new Arch(site);
+				let arch = new Arch(site, this);
 				this.root = arch;
 			}
 			else {
 				if(this.root instanceof Arch)
 				{
-					this.root = splitArch(this.root, site, null, this.queue);
+					this.root = splitArch(this.root, site, null, this);
 				}
 				else
 				{
@@ -523,7 +517,7 @@
 			{
 				clearCanvas(c2);
 
-				this.root.print(0, canvas.width, 40);
+				this.root.print(0, c2.canvas.clientWidth, 40);
 			}
 		}
 
@@ -566,13 +560,13 @@
 			if(child instanceof Arch)
 			{
 				if(goingRight){
-					newBreak = splitArch(child, site, rightBP, this.queue);
+					newBreak = splitArch(child, site, rightBP, this.tree);
 					this.rightChild = newBreak;
 					this.rightHeight = 3;
 				}
 				else
 				{
-					newBreak = splitArch(child, site, this, this.queue);
+					newBreak = splitArch(child, site, this, this.tree);
 					this.leftChild = newBreak;
 					this.leftHeight = 3;
 				}
@@ -725,6 +719,176 @@
 			l = line;
 
 			return (1/(2*(b-l)))*(Math.pow(x,2)-2*a*x+Math.pow(a,2)+Math.pow(b,2)-Math.pow(l,2));
+		}
+
+		function findArchIntersect(leftSite, rightSite, line, log)
+		{
+			if(log) console.log("arch intersecet param ", leftSite, rightSite, line)
+			if(leftSite.y == line || rightSite.y == line)
+			{
+				if(log) console.log("line on site. Increment");
+				line = nextFloat(line);
+			}
+			if(line < leftSite.y || line < rightSite.y)
+			{
+				console.error("Line is smaller than both sites!");
+				line = nextFloat((rightSite.y>leftSite.y? rightSite.y:leftSite.y));
+			}
+			let a = leftSite.x;
+			let b = leftSite.y;
+			let c = rightSite.x;
+			let d = rightSite.y;
+			let l = line;
+
+			if(b == d)
+			{
+				console.log("B and D same.")
+				d = nextFloat(d);
+			}
+
+			if(log) console.log(a,b,c,d,l);
+			let squarePart = Math.sqrt(Math.pow((2*c)/(2*d - 2*l) - (2*a)/(2*b - 2*l), 2) - 4*(1/(2*b - 2*l) - 1/(2*d - 2*l)) * (Math.pow(a,2)/(2*b - 2*l) + Math.pow(b,2)/(2*b - 2*l) - Math.pow(l, 2)/(2*b - 2*l) - Math.pow(c, 2)/(2*d - 2*l) - Math.pow(d, 2)/(2*d - 2*l) + Math.pow(l, 2)/(2*d - 2*l)));
+			let posX = (squarePart + (2*a)/(2*b - 2*l) - (2*c)/(2*d - 2*l))/(2*(1/(2*b - 2*l) - 1/(2*d - 2*l)));
+			let negX = (-squarePart + (2*a)/(2*b - 2*l) - (2*c)/(2*d - 2*l))/(2*(1/(2*b - 2*l) - 1/(2*d - 2*l)));
+			if(log) console.log(squarePart, posX, negX);
+			return[negX, posX];
+			// Wolfram code
+			// Solve[(a^2 + b^2 - l^2 - 2 a x + x^2)/(2 b - 2 l) == (c^2 + d^2 - l^2 - 2 c x + x^2)/(2 d - 2 l), x]
+
+		}
+
+		function findLine(leftSite, rightSite)
+		{
+			let bigY = (leftSite.y > rightSite.y? leftSite.y : rightSite.y);
+			p1X = findArchIntersect(leftSite, rightSite, bigY+1)[myIntersect];
+			p2X = findArchIntersect(leftSite, rightSite, bigY+2)[myIntersect];
+
+			p1Y = leftSite.getY(bigY+1, p1X);
+			p2Y = leftSite.getY(bigY+2, p2X);
+
+			if(p2X == p1X)
+			{
+				throw "Vertical line. Undefined!"
+			}
+
+			slope = (p2Y-p1Y)/(p2X-p1X);
+			offset = p1Y - slope*p1X;
+
+			return new Line(offset, slope);
+		}
+
+		function findLineIntersect(leftSite, midSite, rightSite, log = false)
+		{
+			tryLog = function() {if(log) console.log.apply(console, arguments)}
+			tryLog("ID's %d %d %d", leftSite.siteID, midSite.siteID, rightSite.siteID);
+			tryLog("(%f, %f) (%f, %f) (%f, %f)", leftSite.x, leftSite.y, midSite.x, midSite.y, rightSite.x, rightSite.y)
+
+			let v1 = [midSite.x - leftSite.x, midSite.y - leftSite.y];
+			let v2 = [rightSite.x - midSite.x, rightSite.y - midSite.y];
+
+			if((rightSite.x == midSite.x) && rightSite.y == midSite.y)
+			console.log("the same!");
+			else tryLog("not same");
+
+			tryLog("v1 (%f, %f) v2 (%f, %f)", v1[0], v1[1], v2[0], v2[1]);
+
+			det = v1[0]*v2[1] - v1[1]*v2[0];
+
+			if(det <= 0)
+			{
+				tryLog("Cross is zero or less. Points are on a line or diverging")
+				return null; //Not right turn, not converging
+			}
+
+			leftLine = findLine(leftSite, midSite);
+			rightLine = findLine(midSite, rightSite);
+
+			meetingX = (rightLine.offset - leftLine.offset)/(leftLine.slope - rightLine.slope);
+			meetingY = leftLine.getY(meetingX);
+
+			return [meetingX, meetingY];
+		}
+
+		function detectCircleEvent(leftArch, midArch, rightArch, log = false)
+		{
+			let meeting = findLineIntersect(leftArch.site, midArch.site, rightArch.site, log);
+			if (meeting != null)
+			{
+				let pointToEvent = [meeting[0]-midArch.site.x, meeting[1]-midArch.site.y];
+				let pteMag = Math.sqrt(Math.pow(pointToEvent[0],2)+Math.pow(pointToEvent[1],2));
+				let event = new CircleEvent(meeting[0], meeting[1]+pteMag, meeting[1], midArch);
+				return event;
+			}
+			else return null;
+		}
+
+		function splitArch(oldArch, newSite, farRightBP, tree)
+		{
+			let log = false;
+			let tryLog = function(text)
+			{
+				if(log)
+				console.log(text);
+			}
+
+			if(oldArch.circleEvent != null)
+			{
+				oldArch.circleEvent.falseAlarm = true;
+				oldArch.circleEvent = null;
+			}
+			let e1 = new Edge(null, null);
+			let e2 = new Edge(null, e1);
+			e1.twin = e2;
+
+			let leftArch = oldArch;
+			let midArch = new Arch(newSite, tree);
+			let rightArch = new Arch(oldArch.site, tree);
+			if(farRightBP)
+			farRightBP.tuple[0] = rightArch;
+
+			rightArch.before = midArch;
+			rightArch.after = leftArch.after;
+			if(rightArch.after != null)
+			rightArch.after.before = rightArch;
+
+			midArch.before = leftArch;
+			midArch.after = rightArch;
+
+			leftArch.after = midArch;
+
+			//detect circleEvent
+			let farLeftArch = leftArch.before;
+			let farRightArch = rightArch.after;
+
+			if(farLeftArch != null)
+			{
+				let event = detectCircleEvent(farLeftArch, leftArch, midArch, log);
+				if(event != null)
+				{
+					leftArch.circleEvent = event;
+					tree.queue.queue(event);
+					tryLog("Left circle on add");
+				}
+				else tryLog("No left circle")
+			} else tryLog("No farLeft");
+			if(farRightArch != null)
+			{
+				let event = detectCircleEvent(midArch, rightArch, farRightArch, log);
+				if(event != null)
+				{
+					rightArch.circleEvent = event;
+					tree.queue.queue(event);
+					tryLog("right circle on add");
+				}
+				else tryLog("No right circle")
+			} else tryLog("No far right");
+
+			leftBP = new Breakpoint(leftArch, midArch, leftArch, null, false, e2, tree);
+			rightBP = new Breakpoint(midArch, rightArch, midArch, rightArch, true, e1, tree);
+			leftBP.rightChild = rightBP;
+			leftBP.rightHeight = 2;
+
+			return leftBP;
 		}
 
 		Edge.prototype.getX = function(y)
@@ -1281,176 +1445,6 @@
 			this.root.draw(xCorr, yCorr);
 		}
 
-		function findArchIntersect(leftSite, rightSite, line, log)
-		{
-			if(log) console.log("arch intersecet param ", leftSite, rightSite, line)
-			if(leftSite.y == line || rightSite.y == line)
-			{
-				if(log) console.log("line on site. Increment");
-				line = nextFloat(line);
-			}
-			if(line < leftSite.y || line < rightSite.y)
-			{
-				console.error("Line is smaller than both sites!");
-				line = nextFloat((rightSite.y>leftSite.y? rightSite.y:leftSite.y));
-			}
-			let a = leftSite.x;
-			let b = leftSite.y;
-			let c = rightSite.x;
-			let d = rightSite.y;
-			let l = line;
-
-			if(b == d)
-			{
-				console.log("B and D same.")
-				d = nextFloat(d);
-			}
-
-			if(log) console.log(a,b,c,d,l);
-			let squarePart = Math.sqrt(Math.pow((2*c)/(2*d - 2*l) - (2*a)/(2*b - 2*l), 2) - 4*(1/(2*b - 2*l) - 1/(2*d - 2*l)) * (Math.pow(a,2)/(2*b - 2*l) + Math.pow(b,2)/(2*b - 2*l) - Math.pow(l, 2)/(2*b - 2*l) - Math.pow(c, 2)/(2*d - 2*l) - Math.pow(d, 2)/(2*d - 2*l) + Math.pow(l, 2)/(2*d - 2*l)));
-			let posX = (squarePart + (2*a)/(2*b - 2*l) - (2*c)/(2*d - 2*l))/(2*(1/(2*b - 2*l) - 1/(2*d - 2*l)));
-			let negX = (-squarePart + (2*a)/(2*b - 2*l) - (2*c)/(2*d - 2*l))/(2*(1/(2*b - 2*l) - 1/(2*d - 2*l)));
-			if(log) console.log(squarePart, posX, negX);
-			return[negX, posX];
-			// Wolfram code
-			// Solve[(a^2 + b^2 - l^2 - 2 a x + x^2)/(2 b - 2 l) == (c^2 + d^2 - l^2 - 2 c x + x^2)/(2 d - 2 l), x]
-
-		}
-
-		function findLine(leftSite, rightSite)
-		{
-			let bigY = (leftSite.y > rightSite.y? leftSite.y : rightSite.y);
-			p1X = findArchIntersect(leftSite, rightSite, bigY+1)[myIntersect];
-			p2X = findArchIntersect(leftSite, rightSite, bigY+2)[myIntersect];
-
-			p1Y = leftSite.getY(bigY+1, p1X);
-			p2Y = leftSite.getY(bigY+2, p2X);
-
-			if(p2X == p1X)
-			{
-				throw "Vertical line. Undefined!"
-			}
-
-			slope = (p2Y-p1Y)/(p2X-p1X);
-			offset = p1Y - slope*p1X;
-
-			return new Line(offset, slope);
-		}
-
-		function findLineIntersect(leftSite, midSite, rightSite, log = false)
-		{
-			tryLog = function() {if(log) console.log.apply(console, arguments)}
-			tryLog("ID's %d %d %d", leftSite.siteID, midSite.siteID, rightSite.siteID);
-			tryLog("(%f, %f) (%f, %f) (%f, %f)", leftSite.x, leftSite.y, midSite.x, midSite.y, rightSite.x, rightSite.y)
-
-			let v1 = [midSite.x - leftSite.x, midSite.y - leftSite.y];
-			let v2 = [rightSite.x - midSite.x, rightSite.y - midSite.y];
-
-			if((rightSite.x == midSite.x) && rightSite.y == midSite.y)
-			console.log("the same!");
-			else tryLog("not same");
-
-			tryLog("v1 (%f, %f) v2 (%f, %f)", v1[0], v1[1], v2[0], v2[1]);
-
-			det = v1[0]*v2[1] - v1[1]*v2[0];
-
-			if(det <= 0)
-			{
-				tryLog("Cross is zero or less. Points are on a line or diverging")
-				return null; //Not right turn, not converging
-			}
-
-			leftLine = findLine(leftSite, midSite);
-			rightLine = findLine(midSite, rightSite);
-
-			meetingX = (rightLine.offset - leftLine.offset)/(leftLine.slope - rightLine.slope);
-			meetingY = leftLine.getY(meetingX);
-
-			return [meetingX, meetingY];
-		}
-
-		function detectCircleEvent(leftArch, midArch, rightArch, log = false)
-		{
-			let meeting = findLineIntersect(leftArch.site, midArch.site, rightArch.site, log);
-			if (meeting != null)
-			{splitArch
-				let pointToEvent = [meeting[0]-midArch.site.x, meeting[1]-midArch.site.y];
-				let pteMag = Math.sqrt(Math.pow(pointToEvent[0],2)+Math.pow(pointToEvent[1],2));
-				let event = new CircleEvent(meeting[0], meeting[1]+pteMag, meeting[1], midArch);
-				return event;
-			}
-			else return null;
-		}
-
-		function splitArch(oldArch, newSite, farRightBP, queue)
-		{
-			let log = false;
-			let tryLog = function(text)
-			{
-				if(log)
-					console.log(text);
-			}
-
-			if(oldArch.circleEvent != null)
-			{
-				oldArch.circleEvent.falseAlarm = true;
-				oldArch.circleEvent = null;
-			}
-			let e1 = new Edge(null, null);
-			let e2 = new Edge(null, e1);
-			e1.twin = e2;
-
-			let leftArch = oldArch;
-			let midArch = new Arch(newSite);
-			let rightArch = new Arch(oldArch.site);
-			if(farRightBP)
-				farRightBP.tuple[0] = rightArch;
-
-			rightArch.before = midArch;
-			rightArch.after = leftArch.after;
-			if(rightArch.after != null)
-				rightArch.after.before = rightArch;
-
-			midArch.before = leftArch;
-			midArch.after = rightArch;
-
-			leftArch.after = midArch;
-
-			//detect circleEvent
-			let farLeftArch = leftArch.before;
-			let farRightArch = rightArch.after;
-
-			if(farLeftArch != null)
-			{
-				let event = detectCircleEvent(farLeftArch, leftArch, midArch, log);
-				if(event != null)
-				{
-					leftArch.circleEvent = event;
-					queue.queue(event);
-					tryLog("Left circle on add");
-				}
-				else tryLog("No left circle")
-			} else tryLog("No farLeft");
-			if(farRightArch != null)
-			{
-				let event = detectCircleEvent(midArch, rightArch, farRightArch, log);
-				if(event != null)
-				{
-					rightArch.circleEvent = event;
-					queue.queue(event);
-					tryLog("right circle on add");
-				}
-				else tryLog("No right circle")
-			} else tryLog("No far right");
-
-			leftBP = new Breakpoint(leftArch, midArch, leftArch, null, false, e2, queue);
-			rightBP = new Breakpoint(midArch, rightArch, midArch, rightArch, true, e1, queue);
-			leftBP.rightChild = rightBP;
-			leftBP.rightHeight = 2;
-
-			return leftBP;
-		}
-
 		function makeMapper(a, b, c, d)
 		{
 			if(a == b)
@@ -1570,7 +1564,6 @@
 			//return [[bigSites], [makeCoordCorrecter(widthCoef, widthBuff, 0), makeCoordCorrecter(heightCoef, heightBuff, 0), 0, maxY*10]];
 			return [sites, draw, step, makeCoordCorrecter(widthCoef, widthBuff, minX), makeCoordCorrecter(heightCoef, heightBuff, minY), minY, maxY];
 		}
-
 
 		function voronoi(sites, draw, step, xCorr, yCorr, minY, maxY)
 		{
@@ -1708,7 +1701,6 @@
 			{
 				queue.queue(new VertexEvent(vert, 2));
 			}
-			let k = 0;
 			let drawer = function(timestep)
 			{
 				if(draw)
@@ -1720,20 +1712,10 @@
 				let shouldStep = true;
 				while(queue.length > 0 && ((queue.peek().y <= line && !step) || (step && shouldStep)))
 				{
-					k++;
 					event = queue.dequeue();
-					//console.log("k", k);
-					//console.log(event);
 					if(event instanceof VertexEvent)
 					{
-						try
-						{
-							tree.processVertex(event, step);
-						}
-						catch(err)
-						{
-							console.error(err);
-						}
+						tree.processVertex(event, step);
 					}
 					else
 					{
@@ -1797,24 +1779,91 @@
 			}
 			else
 			{
-				//fast
+				while(queue.length > 0)
+				{
+					event = queue.dequeue();
+					if(event instanceof VertexEvent)
+					{
+						tree.processVertex(event, step);
+					}
+					else
+					{
+						tree.processIntersect(event);
+					}
+				}
+				//Cut edges still in set. Remove these.
+				let cleanEdges = [];
+				let cleanVertices = [];
+				for(edge of secondaryGroup[1])
+				{
+					if(edge.origin && edge.twin.origin)
+						cleanEdges.push(edge)
+				}
+				for(vert of secondaryGroup[0])
+				{
+					if(vert.edge)
+						cleanVertices.push(vert);
+				}
+				return [cleanVertices, cleanEdges];
 			}
 		}
 
-		$("#Real").click(function()
+		$("#Vor").click(function()
 		{
 			voronoi.apply(this, realArguments(true, false));
 		});
-
-		$("#RealStep").click(function()
+		$("#VorStep").click(function()
 		{
 			func = voronoi.apply(this, realArguments(false, true));
-			$("#RealStep").off("click").click(func);
+			$("#VorStep").off("click").click(func);
 
 			for(let i = 0; i < 0; i++)
 			{
-				$("#RealStep").click();
+				$("#VorStep").click();
 			}
+		});
+		$("#VorFast").click(function()
+		{
+			let minmax = getMinMax();
+			let minX = minmax[0][0];
+			let maxX = minmax[0][1];
+			let minY = minmax[1][0];
+			let maxY = minmax[1][1];
+
+			let sites = properSites();
+
+			res = voronoi(sites, false, false, null, null, null, null, null);
+
+			heightCoef = (canvas.height / (maxY-minY)) * 0.95;
+			widthCoef = (canvas.width / (maxX-minX)) * 0.95;
+			heightBuff = canvas.height * 0.025;
+			widthBuff = canvas.width * 0.025;
+
+			let yCorr = makeCoordCorrecter(heightCoef, heightBuff, minY);
+			let xCorr = makeCoordCorrecter(widthCoef, widthBuff, minX);
+			clearCanvas(c1);
+
+			if(false)
+			{
+				c1.fillStyle = "#0000FF";
+				for(vert of res[0])
+				{
+					c1.beginPath();
+					c1.arc(xCorr(vert.x), yCorr(vert.y), dotSize, 0, 2 * Math.PI, false);
+					c1.fill();
+				}
+			}
+			if(true)
+			{
+				for(edge of res[1])
+				{
+					if(edge.twin.origin != null)
+					{
+						edge.draw(c1, xCorr, yCorr, "#FF0000");
+					}
+				}
+			}
+			overlayMap();
 		});
 
 		function createEdge(v1, v2)
@@ -1857,27 +1906,29 @@
 		}
 		function realCuts(draw, step)
 		{
-			let minmax = getMinMax();
-			let minX = minmax[0][0];
-			let maxX = minmax[0][1];
-			let minY = minmax[1][0];
-			let maxY = minmax[1][1];
-
 			let sites = properSites();
-
 			let vor = voronoi(sites, false, false, null, null, null, null, null);
-
-			heightCoef = (canvas.height / (maxY-minY)) * 0.95;
-			widthCoef = (canvas.width / (maxX-minX)) * 0.95;
-			heightBuff = canvas.height * 0.025;
-			widthBuff = canvas.width * 0.025;
-
-			let xCorr = makeCoordCorrecter(widthCoef, widthBuff, minX);
-			let yCorr = makeCoordCorrecter(heightCoef, heightBuff, minY);
-
 			let map = getMapEdgeList();
 
-			return [[map[0], map[1]], vor, draw, step, xCorr, yCorr, minY, maxY]
+			if(draw || step)
+			{
+				let minmax = getMinMax();
+				let minX = minmax[0][0];
+				let maxX = minmax[0][1];
+				let minY = minmax[1][0];
+				let maxY = minmax[1][1];
+
+
+				heightCoef = (canvas.height / (maxY-minY)) * 0.95;
+				widthCoef = (canvas.width / (maxX-minX)) * 0.95;
+				heightBuff = canvas.height * 0.025;
+				widthBuff = canvas.width * 0.025;
+
+				let xCorr = makeCoordCorrecter(widthCoef, widthBuff, minX);
+				let yCorr = makeCoordCorrecter(heightCoef, heightBuff, minY);
+				return [[map[0], map[1]], vor, draw, step, xCorr, yCorr, minY, maxY]
+			}
+			else return [[map[0], map[1]], vor, draw, step, null, null, null, null]
 		}
 
 		$("#Cut").click(function()
@@ -1898,15 +1949,33 @@
 				res();
 			}
 		});
-
-		$("#Special").click(function()
+		$("#CutFast").click(function()
 		{
-			mapper = makeMapper(0, 800, 0, 1400);
-			coef = 800/1400;
-			sites = testSites();
+			let res = lineIntersect.apply(this, realCuts(false, false));
 
-			voronoi(sites, true, false, makeCoordCorrecter(0.5, 0, -400), makeCoordCorrecter(0.5 ,0, -400), 0, 1800);
+			let minmax = getMinMax();
+			let minX = minmax[0][0];
+			let maxX = minmax[0][1];
+			let minY = minmax[1][0];
+			let maxY = minmax[1][1];
+
+			heightCoef = (canvas.height / (maxY-minY)) * 0.95;
+			widthCoef = (canvas.width / (maxX-minX)) * 0.95;
+			heightBuff = canvas.height * 0.025;
+			widthBuff = canvas.width * 0.025;
+
+			let yCorr = makeCoordCorrecter(heightCoef, heightBuff, minY);
+			let xCorr = makeCoordCorrecter(widthCoef, widthBuff, minX);
+
+			clearCanvas(c1);
+
+			for(edge of res[1])
+			{
+				edge.draw(c1, xCorr, yCorr, "#ff0000");
+			}
+			overlayMap();
 		});
+
 
 		function drawArrows(edge, xCorr, yCorr)
 		{
@@ -1970,55 +2039,6 @@
 
 		}
 
-		$("#Fast").click(function()
-		{
-			let minmax = getMinMax();
-			let minX = minmax[0][0];
-			let maxX = minmax[0][1];
-			let minY = minmax[1][0];
-			let maxY = minmax[1][1];
-
-			let sites = properSites();
-
-			res = voronoi(sites, false, false, null, null, null, null, null);
-
-			heightCoef = (canvas.height / (maxY-minY)) * 0.95;
-			widthCoef = (canvas.width / (maxX-minX)) * 0.95;
-			heightBuff = canvas.height * 0.025;
-			widthBuff = canvas.width * 0.025;
-
-			let yCorr = makeCoordCorrecter(heightCoef, heightBuff, minY);
-			let xCorr = makeCoordCorrecter(widthCoef, widthBuff, minX);
-			clearCanvas(c1);
-
-			if(false)
-			{
-				c1.fillStyle = "#0000FF";
-				for(vert of res[0])
-				{
-					c1.beginPath();
-					c1.arc(xCorr(vert.x), yCorr(vert.y), dotSize, 0, 2 * Math.PI, false);
-					c1.fill();
-				}
-			}
-			if(true)
-			{
-				for(edge of res[1])
-				{
-					if(edge.twin.origin != null)
-					{
-						edge.draw(c1, xCorr, yCorr, "#FF0000");
-					}
-				}
-			}
-			overlayMap();
-		});
-
-		$("#Step").click(function()
-		{
-			func = voronoi(testSites(), false, true, makeCoordCorrecter(0.5, 0, -400), makeCoordCorrecter(0.5 ,0, -800), 0, 2*canvas.height);
-			$("#Step").off("click").click(func);
-		});
 
 		function vertexEdge(startID, startEdge, endID, endEdge)
 		{
@@ -2398,206 +2418,7 @@
 			clearCanvas(c1);
 
 			overlayMap();
-			let vertFaces = getVertsFaces();
-			let rawVerts = vertFaces[0];
-			let faces = vertFaces[1];
-			let IDs = 0
-
-			//build up lines by finding common vertices. If no common, make new line.
-			for(index of faces)
-			{
-				if (index.length == 2)
-				{
-					found = false;
-					foundAt = null;
-					for(line of lines)
-					{
-						foundHere = false;
-						if(line.startEdge.startID == index[0])
-						{
-							ve = new vertexEdge(index[1], null, index[0], line.startEdge);
-							line.startEdge.startEdge = ve;
-							line.startEdge = ve;
-							line.numEdges++;
-							foundHere = true;
-						}
-						else if(line.startEdge.startID == index[1])
-						{
-							ve = new vertexEdge(index[0], null, index[1], line.startEdge);
-							line.startEdge.startEdge = ve;
-							line.startEdge = ve;
-							line.numEdges++;
-							foundHere = true;
-						}
-						else if(line.endEdge.endID == index[0])
-						{
-							ve = new vertexEdge(index[0], line.endEdge, index[1], null);
-							line.endEdge.endEdge = ve;
-							line.endEdge = ve;
-							line.numEdges++;
-							foundHere = true;
-						}
-						else if(line.endEdge.endID == index[1])
-						{
-							ve = new vertexEdge(index[1], line.endEdge, index[0], null);
-							line.endEdge.endEdge = ve;
-							line.endEdge = ve;
-							line.numEdges++;
-							foundHere = true;
-						}
-						if (found && foundHere)
-						{
-							mergeLines(foundAt, lines);
-							index = lines.indexOf(line);				//find redundant
-							lines.splice(index, 1);						//Remove redundant
-						}
-						else if(foundHere)
-						{
-							foundAt = line;
-							found = true;
-						}
-					}
-					if(found == false)
-					{
-						ve = new vertexEdge(index[0], null, index[1], null);
-						vl = new vertexLine(ve, ve, IDs++);
-						lines.push(vl);
-					}
-				}
-			}
-			drawLines();
-
 		});
 
-		$("#mergeBtn").click(function()
-		{
-			while(lines.length > 1)
-			{
-				first = null;
-				second = null;
-				firstStart = false;
-				secondStart = false;
-				smallestDist = Number.MAX_VALUE;
-				for (var i = 0; i < lines.length-1; i++)
-				{
-					for(var j = i+1; j < lines.length; j++)
-					{
-						fsx = vertices[lines[i].startEdge.startID][0];
-						fsy = vertices[lines[i].startEdge.startID][1];
-						fex = vertices[lines[i].endEdge.endID][0];
-						fey = vertices[lines[i].endEdge.endID][1];
-
-						ssx = vertices[lines[j].startEdge.startID][0];
-						ssy = vertices[lines[j].startEdge.startID][1];
-						sex = vertices[lines[j].endEdge.endID][0];
-						sey = vertices[lines[j].endEdge.endID][1];
-
-						SS = Math.sqrt(Math.pow(fsx - ssx, 2) + Math.pow(fsy - ssy, 2));
-						SE = Math.sqrt(Math.pow(fsx - sex, 2) + Math.pow(fsy - sey, 2));
-						ES = Math.sqrt(Math.pow(fex - ssx, 2) + Math.pow(fey - ssy, 2));
-						EE = Math.sqrt(Math.pow(fex - sex, 2) + Math.pow(fey - sey, 2));
-
-						smaller = false;
-						if (SS < smallestDist)
-						{
-							smaller = true
-							smallestDist = SS;
-							firstStart = true;
-							secondStart = true;
-						}
-						if(SE < smallestDist)
-						{
-							smaller = true
-							smallestDist = SE;
-							firstStart = true;
-							secondStart = false;
-						}
-						if(ES < smallestDist)
-						{
-							smaller = true
-							smallestDist = ES;
-							firstStart = false;
-							secondStart = true;
-						}
-						if(EE < smallestDist)
-						{
-							smaller = true
-							smallestDist = EE;
-							firstStart = false;
-							secondStart = false;
-						}
-						if(smaller == true)
-						{
-							first = lines[i];
-							second = lines[j];
-						}
-					}
-				}
-				var ve;
-				if(firstStart)
-				{
-					if(secondStart)
-						ve = new vertexEdge(second.startEdge.startID, null, first.startEdge.startID, first.startEdge);
-					else
-						ve = new vertexEdge(second.endEdge.endID, null, first.startEdge.startID, first.startEdge);
-					first.startEdge.startEdge = ve;
-					first.startEdge = ve;
-					first.numEdges ++;
-				}
-				else
-				{
-					if(secondStart)
-						ve = new vertexEdge(first.endEdge.endID, first.endEdge, second.startEdge.startID, null);
-					else
-						ve = new vertexEdge(first.endEdge.endID, first.endEdge, second.endEdge.endID, null);
-					first.endEdge.endEdge = ve;
-					first.endEdge = ve;
-					first.numEdges++;
-				}
-				v1x = vertices[ve.startID][0]- minX;
-				v1y = vertices[ve.startID][1]- minY;
-				v2x = vertices[ve.endID][0]- minX;
-				v2y = vertices[ve.endID][1]- minY;
-
-				c2.strokeStyle = "#ff0000";
-
-				c2.beginPath();
-				c2.moveTo(v1x * widthCoef + widthBuff, v1y * heightCoef + heightBuff);
-				c2.lineTo(v2x * widthCoef + widthBuff, v2y * heightCoef + heightBuff);
-				c2.stroke();
-
-
-				mergeLines(first, second);
-				index = lines.indexOf(second);				//find redundant
-				lines.splice(index, 1);						//Remove redundant
-			}
-			last = lines[0];
-			closeVe = new vertexEdge(last.endEdge.endID, last.endEdge, last.startEdge.startID, null);
-			last.endEdge.endEdge = closeVe;
-			last.endEdge = closeVe;
-			last.numEdges++;
-
-			v1x = vertices[closeVe.startID][0]- minX;
-			v1y = vertices[closeVe.startID][1]- minY;
-			v2x = vertices[closeVe.endID][0]- minX;
-			v2y = vertices[closeVe.endID][1]- minY;
-
-			c2.strokeStyle = "#ff0000";
-
-			c2.beginPath();
-			c2.moveTo(v1x * widthCoef + widthBuff, v1y * heightCoef + heightBuff);
-			c2.lineTo(v2x * widthCoef + widthBuff, v2y * heightCoef + heightBuff);
-			c2.stroke();
-
-		});
-
-		$("#drawLinesBtn").click(function()
-		{
-			drawLines();
-		});
-		$("#LogLinesBtn").click(function()
-		{
-			console.log(lines);
-		});
 	</script>
 </html>
