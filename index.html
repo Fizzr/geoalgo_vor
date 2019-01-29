@@ -1466,20 +1466,6 @@
 			}
 		}
 
-		function testSites(){
-			site1 = new Site(300, 200);
-			site2 = new Site(400, 400);
-			site3 = new Site(500, 450);
-			site4 = new Site(200, 550);
-			site5 = new Site(299, 600);
-			site6 = new Site(100, 700);
-			site7 = new Site(700, 100);
-			site8 = new Site(345, 654);
-			site9 = new Site(213, 432);
-			site10 = new Site(43, 143);
-			return [site1, site2, site3, site4, site5, site6, site7, site8, site9, site10];
-		}
-
 		function properSites()
 		{
 			let vertFaces = getVertsFaces();
@@ -1875,35 +1861,7 @@
 			v2.edge = e2;
 			return e1;
 		}
-		function testCuts(draw, step)
-		{
-			let v1 = new Vertex(0, 0);
-			let v2 = new Vertex(100, 0);
-			let v3 = new Vertex(50, 50);
-			let v4 = new Vertex(50, 100);
 
-			let v5 = new Vertex(0, 24);
-			let v6 = new Vertex(100, 26);
-
-			let e1 = createEdge(v1, v3);
-			let e2 = createEdge(v2, v3);
-			let e3 = createEdge(v3, v4);
-			let e4 = createEdge(v5, v6);
-
-			let edges = [e1,e2,e3];
-
-			e1.next = e3;
-			e2.next = e1.twin;
-			e3.twin.next = e2.twin;
-
-			let xCorr = (x=>x);
-			let yCorr = xCorr;
-
-			let prim = [[v1,v2,v3,v4], edges];
-			let sec = [[v5, v6], [e4]];
-
-			return [prim, sec, draw, step, xCorr, yCorr, 0, 200];
-		}
 		function realCuts(draw, step)
 		{
 			let sites = properSites();
@@ -1940,14 +1898,8 @@
 
 		$("#CutStep").click(function()
 		{
-			//let res = lineIntersect.apply(this, testCuts(false, true));
 			let res = lineIntersect.apply(this, realCuts(false, true));
 			$("#CutStep").off("click").click(res);
-
-			for(let i = 0; i < 1300; i++)
-			{
-				res();
-			}
 		});
 		$("#CutFast").click(function()
 		{
