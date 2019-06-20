@@ -32,11 +32,21 @@
     	}</textarea>
 	</body>
 
-	<script src="js-priority-queue/priority-queue.js"></script>
+	<!--script src="js-priority-queue/priority-queue.js"></script>
 
+	<script type="module" src="voronoi.mjs"></script>
+	<script type="module" src="lineIntersect.mjs"></script-->
 
-	<script>
+	<script type="module">
  		//54,55@0;;397,398@0
+		//import { PriorityQueue }  from "./js-priority-queue/priority-queue.js"
+		//import * as pq  from "./js-priority-queue/priority-queue.min.js";
+		import "./js-priority-queue/priority-queue.min.js";
+
+		//import pq from "./js-priority-queue/priority-queue.js";
+		//const { PriorityQueue } = pq;
+		import * as vor from "./voronoi.mjs";
+		import * as lin from "./lineIntersect.mjs";
 
 		const canvasWidth = 1000;
 		const canvasHeight = 1000;
@@ -56,1396 +66,29 @@
 		const c1 = canvas.getContext("2d");
 		const c2 = canvas2.getContext("2d");
 
-		function clearCanvas(context)
+		function clearCanvas(context) //Over vor lin
 		{
 			context.fillStyle = "#ffffff";
 			context.fillRect(0, 0, context.canvas.clientWidth, context.canvas.clientHeight);
 		}
 
-//Grabbing the "negative" X value will always give the appropriate sided X. Since the sites have a specified ordered in the tuple and the equation flipped upside down if sites are flipped.
-		const myIntersect = 0;
 
-		var lines = [];
+		var lines = []; //Over
 
-		var dotSize = 3;
+		var dotSize = 3; // Vor, Lin, Over
 
 
-		clearCanvas(c1);
-		clearCanvas(c2);
+		clearCanvas(c1); //Over
+		clearCanvas(c2); //Over
 
-		function Vertex(x, y)
-		{
-			this.x = x;
-			this.y = y;
-			this.edge = null;
-		}
 
-		function Edge (origin, twin)
-		{
-			this.origin = origin;
-			this.twin = twin;
-			this.next = null;
-			this.prev = null;
-		}
-
-		function Site(x, y)
-		{
-			this.x = x;
-			this.y = y;
-			this.siteID = 0
-		}
-
-		function CircleEvent(x,y, eventY, arch)
-		{
-			this.x = x;
-			this.y = y;
-			this.eventY = eventY;
-			this.falseAlarm = false;
-			this.dissapearingArch = arch;
-		}
-
-		function Line(offset, slope)
-		{
-			this.offset = offset;
-			this.slope = slope;
-		}
-
-		function compareEvents(a, b)
-		{
+		 function compareEvents(a, b) //Over vor Lin
+		 {
 			if(a.y === b.y ) return a.x - b.x
 			return a.y - b.y;
 		}
 
-		//From internet
-		function floatToBits(f){
-		    var buf = new ArrayBuffer(4);
-		    (new Float32Array(buf))[0] = f;
-		    return (new Uint32Array(buf))[0];
-		}
-		function bitsToFloat(b){
-		    var buf = new ArrayBuffer(4);
-		    (new Uint32Array(buf))[0] = b;
-		    return (new Float32Array(buf))[0];
-		}
-		function nextFloat(f) {
-		    // Note that this moves away from 0.0
-		    // It will fail at +/- infinity and result in an NaN
-		    var bitRepr = floatToBits(f);
-		    bitRepr++;
-		    return bitsToFloat(bitRepr);
-		}
-		function prevFloat(f) {
-			// Note that this moves towards 0.0
-			// This will fail at 0.0 and result in an NaN
-			var bitRepr = floatToBits(f);
-			bitRepr--;
-			return bitsToFloat(bitRepr);
-		}
-
-		function BeachTree(queue)
-		{
-			this.root = null;
-			this.edges = [];
-			this.vertices = [];
-			this.queue = queue;
-			this.archID = 1;
-			this.bpID = 1;
-		}
-
-		function BeachNode(){}
-
-		function Breakpoint(leftArch, rightArch, leftChild, rightChild, isRightSide, edge, tree)
-		{
-			this.edge = edge;
-			this.tuple = [leftArch, rightArch];
-			this.leftChild = leftChild;
-			this.rightChild = rightChild;
-			this.isRightSide = isRightSide;
-			this.tree = tree;
-			this.bpID = tree.bpID++;
-			this.leftHeight = 1;
-			this.rightHeight = 1;
-		}
-
-		function Arch(site, tree)
-		{
-			this.site = site;
-			this.circleEvent = null;
-			this.before = null;
-			this.after = null;
-			this.archID = tree.archID;
-		}
-
-		function VertexEvent(vertex, group)
-		{
-			this.x = vertex.x;
-			this.y = vertex.y;
-			this.vertex = vertex;
-			this.group = group;
-		}
-
-		function IntersectEvent(x, y, leftLeaf, rightLeaf)
-		{
-			this.x = x;
-			this.y = y;
-			this.leftLeaf = leftLeaf;
-			this.rightLeaf = rightLeaf;
-		}
-
-		function IntersectTree(queue)
-		{
-			this.root = null;
-			this.queue = queue;
-			this.leafID = 1;
-			this.nodeID = 1;
-		}
-
-		function IntersectNode(leftLeaf, rightLeaf, tree, ID, parent)
-		{
-			this.rightInLeft = leftLeaf;
-			this.tree = tree;
-			this.leftChild = leftLeaf;
-			this.rightChild = rightLeaf;
-			this.ID = ID;
-			this.parent = parent;
-			this.rightHeight = 1;
-			this.leftHeight = 1;
-		}
-
-		function IntersectLeaf(edge, group, tree, ID)
-		{
-			this.edge = edge;
-			this.before = null;
-			this.after = null;
-			this.group = group;
-			this.tree = tree;
-			this.parent = null;
-			this.ID = ID;
-			this.removed = false;
-		}
-
-		Breakpoint.prototype = Object.create(BeachNode.prototype);
-		Arch.prototype = Object.create(BeachNode.prototype);
-
-		function decFunc(node, rightSide)
-		{
-			return function()
-			{
-				if(rightSide)
-				node.rightHeight--;
-				else
-				node.leftHeight--;
-			}
-		}
-		BeachTree.prototype.addSite = function(site)
-		{
-			if(!site instanceof Site)
-			{
-				throw "Invalid Argument, not of instance Site"
-			}
-			if(this.root == null)
-			{
-				let arch = new Arch(site, this);
-				this.root = arch;
-			}
-			else {
-				if(this.root instanceof Arch)
-				{
-					this.root = splitArch(this.root, site, null, this);
-				}
-				else
-				{
-					this.root.addSite(site, null);
-				}
-			}
-		}
-		BeachTree.prototype.processCircle = function(circleEvent)
-		{
-			if(!this.root instanceof Breakpoint)
-			{
-				throw "Attempted to remove arch from BeachTree without breakpoints";
-				return;
-			}
-			if(circleEvent.falseAlarm == true)
-			return;
-
-			let tryLog = function() {if(log) console.log.apply(console, arguments)}
-			let log = false;
-
-			// if(circleEvent.dissapearingArch.archID == 647)
-			// 	log = true;
-
-			let lastNode = null;
-			let currentNode = this.root;
-			let firstBP = null;
-			let sndBP = null;
-			let firstRight = false;
-
-			let arch = circleEvent.dissapearingArch;
-			let leftArch = arch.before;
-			let rightArch = arch.after;
-
-			tryLog("Circle tripplet %d %d %d", leftArch.archID, arch.archID, rightArch.archID);
-
-			let lastRight = false;
-			funcList = [];
-			//Find both involved breakpoints
-			while(sndBP == null)
-			{
-				if(!(currentNode instanceof Breakpoint))
-				{
-					console.error("Circle tripplet %d %d %d", leftArch.archID, arch.archID, rightArch.archID);
-					throw "Diddn't find breakpoints for circleEvent"
-					return;
-				}
-				tryLog("Searching through ", currentNode.bpID);
-				if(currentNode.tuple[0] == leftArch && currentNode.tuple[1] == arch)
-				{
-					if(firstBP == null)
-					{
-						firstBP = currentNode;
-						lastNode = currentNode;
-						if(currentNode.leftHeight >= currentNode.rightHeight)
-						funcList = [];
-						funcList.push(decFunc(currentNode, true));
-						currentNode = currentNode.rightChild;
-						lastRight = true;
-						firstRight = false;
-
-					}
-					else
-					{
-						sndBP = currentNode;
-					}
-				}
-				else if(currentNode.tuple[0] == arch && currentNode.tuple[1] == rightArch)
-				{
-					if(firstBP == null)
-					{
-						tryLog("Found first")
-						firstBP = currentNode;
-						lastNode = currentNode;
-						if(currentNode.rightHeight >= currentNode.leftHeight)
-						funcList = [];
-						funcList.push(decFunc(currentNode, false));0
-						currentNode = currentNode.leftChild;
-						lastRight = false;
-						firstRight = true;
-					}
-					else
-					{
-						tryLog("Found second");
-						sndBP = currentNode;
-					}
-				}
-				else
-				{
-					lastNode = currentNode;
-					let breakX = currentNode.breakX(circleEvent.y, log);
-					tryLog("BreakX %f EventX %f", breakX, circleEvent.x);
-					if(circleEvent.x == breakX)
-					{
-						throw "Event on top of breakpoint, undefined behaviour!"
-					}
-					else if(circleEvent.x > breakX)
-					{
-						if(currentNode.leftHeight >= currentNode.rightHeight)
-						funcList = [];
-						funcList.push(decFunc(currentNode, true));
-						currentNode = currentNode.rightChild;
-						lastRight = true;
-					}
-					else
-					{
-						if(currentNode.rightHeight >= currentNode.leftHeight)
-						funcList = [];
-						funcList.push(decFunc(currentNode, false));
-						currentNode = currentNode.leftChild;
-						lastRight = false;
-					}
-				}
-			}
-			//Found both!
-			let sndOtherNode = (sndBP.rightChild == arch? sndBP.leftChild : sndBP.rightChild);
-			if(lastRight)
-			{
-				if(lastNode.leftHeight < lastNode.rightHeight)
-				{
-					for (func of funcList)
-					func();
-				}
-				else
-				{
-					lastNode.rightHeight--;
-				}
-				lastNode.rightChild = sndOtherNode;
-			}
-			else
-			{
-				if(lastNode.rightHeight < lastNode.leftHeight)
-				{
-					for (func of funcList)
-					func();
-				}
-				else
-				{
-					lastNode.leftHeight--;
-				}
-				lastNode.leftChild = sndOtherNode;
-			}
-
-			if(this.root.getHeight()-1 != (this.root.leftHeight>this.root.rightHeight? this.root.leftHeight: this.root.rightHeight))
-			{
-				console.error("Height error! Got %d, have %d and %d", this.root.getHeight()-1, this.root.leftHeight, this.root.rightHeight)
-				console.error("While processing tripple %d %d %d", leftArch.archID, arch.archID, rightArch.archID);
-			}
-			leftArch.after = rightArch;
-			rightArch.before = leftArch;
-
-			firstEdge = firstBP.edge;
-			sndEdge = sndBP.edge;
-
-			let vert = new Vertex(circleEvent.x, circleEvent.eventY);
-			let twinEdge = new Edge(vert, null);
-			let newEdge = new Edge(null, twinEdge);
-			twinEdge.twin = newEdge;
-
-			sndEdge.origin = vert;
-			firstEdge.origin = vert;
-			vert.edge = twinEdge;
-
-			let leftEdge;
-			let rightEdge;
-
-			if(firstRight)
-			{
-				rightEdge = firstEdge;
-				leftEdge = sndEdge;
-			}
-			else
-			{
-				leftEdge = firstEdge;
-				rightEdge = sndEdge;
-			}
-
-			leftEdge.twin.next = rightEdge;
-			rightEdge.twin.next = twinEdge;
-			newEdge.next = leftEdge;
-			leftEdge.prev = newEdge;
-			twinEdge.prev = rightEdge.twin;
-			rightEdge.prev = leftEdge.twin;
-
-
-			if(sndEdge.twin.origin != null)
-			{
-				this.edges.push(sndEdge);
-			}
-			if(firstEdge.twin.origin != null)
-			{
-				this.edges.push(firstEdge);
-			}
-			this.vertices.push(vert);
-
-
-			firstBP.tuple = [leftArch, rightArch];
-			firstBP.edge = newEdge;
-
-			if(leftArch.circleEvent != null)
-			{
-				leftArch.circleEvent.falseAlarm = true;
-				leftArch.circleEvent = null;
-			}
-			if(rightArch.circleEvent != null)
-			{
-				rightArch.circleEvent.falseAlarm = true;
-				rightArch.circleEvent = null;
-			}
-
-			if(leftArch.before != null)
-			{
-				let event = detectCircleEvent(leftArch.before, leftArch, rightArch);
-				if(event != null)
-				{
-					leftArch.circleEvent = event;
-					this.queue.queue(event);
-				}
-			}
-			if(rightArch.after != null)
-			{
-				let event = detectCircleEvent(leftArch, rightArch, rightArch.after);
-				if(event != null)
-				{
-					rightArch.circleEvent = event;
-					this.queue.queue(event);
-				}
-			}
-		}
-		BeachTree.prototype.closeEdges = function()
-		{
-			if(this.root && (this.root instanceof Breakpoint))
-				this.root.closeEdges();
-		}
-		BeachTree.prototype.draw = function(line, xCorr, yCorr, arches)
-		{
-			if(this.root != null)
-			{
-				this.root.draw(line, xCorr, yCorr, arches);
-				c1.strokeStyle = "#ff0000"
-				for (edge of this.edges)
-				{
-					if(edge.twin.origin != null)
-					{
-						c1.beginPath();
-						c1.moveTo(xCorr(edge.origin.x), yCorr(edge.origin.y));
-						c1.lineTo(xCorr(edge.twin.origin.x), yCorr(edge.twin.origin.y));
-						c1.stroke();
-					}
-				}
-				// for(vert of this.vertices)
-				// {
-				// 	c1.fillStyle = "#FF0000";
-				//
-				// 	c1.beginPath();
-				// 	c1.arc(xCorr(vert.x), yCorr(vert.y), dotSize*3/4, 0, 2 * Math.PI, false);
-				// 	c1.fill();
-				// }
-			}
-		}
-		BeachTree.prototype.print = function(line)
-		{
-			if(this.root != null)
-			{
-				clearCanvas(c2);
-
-				this.root.print(0, c2.canvas.clientWidth, 40);
-			}
-		}
-
-		Breakpoint.prototype.closeEdges = function()
-		{
-			if(this.edge.twin.origin)
-			{
-				let a = this.edge.twin.prev;
-				let b = this.edge.next;
-				a.next = b;
-				b.prev = a;
-				this.edge.twin.origin.edge = b;
-			}
-			if(this.leftChild instanceof Breakpoint)
-				this.leftChild.closeEdges();
-			if(this.rightChild instanceof Breakpoint)
-				this.rightChild.closeEdges();
-		}
-		Breakpoint.prototype.getHeight = function()
-		{
-			let left;
-			let right;
-			if(this.leftChild instanceof Arch)
-				left = 1;
-			else left = this.leftChild.getHeight();
-			if(this.rightChild instanceof Arch)
-				right = 1;
-			else right = this.rightChild.getHeight();
-			return (left > right? left:right)+1;
-		}
-		Breakpoint.prototype.breakX = function(line, log = false)
-		{
-			return findArchIntersect(this.tuple[0].site, this.tuple[1].site, line, log)[myIntersect];
-		}
-		Breakpoint.prototype.addSite = function(site, rightBP)
-		{
-			let breakpointX = this.breakX(site.y); //Grabbing the "negative" X value will always give the appropriate sided X. Since the sites have a specified ordered in the tuple the positive X will be on the left side in left side breakpoints, and vice versa for right.
-			let goingRight = site.x > breakpointX;
-			let child = (goingRight? this.rightChild: this.leftChild);
-			if(child instanceof Arch)
-			{
-				if(goingRight){
-					newBreak = splitArch(child, site, rightBP, this.tree);
-					this.rightChild = newBreak;
-					this.rightHeight = 3;
-				}
-				else
-				{
-					newBreak = splitArch(child, site, this, this.tree);
-					this.leftChild = newBreak;
-					this.leftHeight = 3;
-				}
-			}
-			else
-			{
-				let height = child.addSite(site, (goingRight? rightBP: this)) + 1;
-				if (goingRight) this.rightHeight = height;
-				else this.leftHeight = height;
-			}
-			return (this.rightHeight > this.leftHeight? this.rightHeight: this.leftHeight);
-		}
-		Breakpoint.prototype.draw = function(line, xCorr, yCorr, arches)
-		{
-			let intersect = this.breakX(line);
-			let index = (this.isRightSide? 1: 0);
-			let invIndex = (this.isRightSide? 0: 1);
-			let startB;
-
-			if(this.edge.twin.origin != null)
-			{
-				startB = [this.edge.twin.origin.x, this.edge.twin.origin.y];
-			}
-			else
-			{
-				startB = [this.tuple[invIndex].site.x, this.tuple[index].site.getY(this.tuple[invIndex].site.y, this.tuple[invIndex].site.x)];
-			}
-
-			let b = [intersect, this.tuple[0].site.getY(line, intersect)];
-
-			c1.fillStyle = "#FF0000";
-
-			c1.beginPath();
-			c1.arc(xCorr(b[0]), yCorr(b[1]), dotSize, 0, 2 * Math.PI, false);
-			c1.fill();
-
-			c1.strokeStyle = "#ff0000";
-			c1.beginPath();
-			c1.moveTo(xCorr(b[0]), yCorr(b[1]));
-			c1.lineTo(xCorr(startB[0]), yCorr(startB[1]));
-			c1.stroke();
-
-			this.leftChild.draw(line, xCorr, yCorr, arches);
-			this.rightChild.draw(line, xCorr, yCorr, arches);
-		}
-		Breakpoint.prototype.print = function(start, end, height)
-		{
-			let stdHeightDiff = 50;
-			let topToBotArr = 35;
-			let ArToTxt = 20;
-			c2.fillStyle = "#FF0000";
-			c2.font = "12px Arial";
-			c2.textAlign = "center"
-			let mid = start + (end-start)/2;
-			c2.fillText(this.bpID, mid, height);
-			c2.fillStyle = "#0000FF";
-			c2.fillText(this.tuple[0].archID+","+this.tuple[1].archID, mid, height+15)
-			c2.fillText(this.leftHeight + " h " + this.rightHeight, mid, height + 30)
-
-			let ratio = this.leftHeight/(this.leftHeight+this.rightHeight);
-			let leftPartition = (end-start) * ratio;
-
-			c2.strokeStyle = "#000000";
-			c2.beginPath();
-			c2.moveTo(mid, height+topToBotArr);
-			c2.lineTo(start + (leftPartition)/2, height+stdHeightDiff);
-			c2.stroke();
-
-			c2.beginPath();
-			c2.moveTo(mid, height+topToBotArr);
-			c2.lineTo(start+leftPartition + (end-(start+leftPartition))/2, height+stdHeightDiff);
-			c2.stroke();
-
-			this.leftChild.print(start, start+leftPartition, height+stdHeightDiff+ArToTxt);
-			this.rightChild.print(start+leftPartition, end, height+stdHeightDiff+ArToTxt);
-		}
-
-		Arch.prototype.print = function(start, end, height)
-		{
-			c2.fillStyle = "#0000FF";
-			c2.font = "12px Arial";
-			c2.textAlign = "center"
-			let mid = start + (end-start)/2;
-			c2.fillText(this.archID, mid, height);
-			c2.fillStyle = "#00BB00";
-			c2.fillText(this.site.siteID, mid, height+15);
-			c2.fillStyle = "#FF0000";
-		}
-		Arch.prototype.draw = function(line, xCorr, yCorr, arches)
-		{
-			if(!arches) return;
-			if(this.site.y == line)
-				line = nextFloat(line);
-
-			let tupX = this.site.getZeroX(line);
-			let midY = this.site.getMidY(line);
-
-			let cpx = 2 * this.site.x - tupX[0]/2 - tupX[1]/2;
-			let cpy = 2 * midY;
-
-			c1.strokeStyle = "rgba(0,0,0,0.3)";
-
-			c1.beginPath();
-			c1.moveTo(xCorr(tupX[0]), yCorr(0));
-			c1.quadraticCurveTo(xCorr(cpx), yCorr(cpy), xCorr(tupX[1]), yCorr(0));
-			c1.stroke();
-
-		}
-
-		//TODO: Merge concepts of lines and edges.
-		Line.prototype.getX = function (y)
-		{
-			return (y-this.offset)/this.slope;
-		}
-		Line.prototype.getY = function (x)
-		{
-			return this.offset+this.slope*x;
-		}
-
-		Site.prototype.getZeroX = function(line)
-		{
-			if(this.y == line)
-			line = nextFloat(line);
-			a = this.x;
-			b = this.y;
-			l = line;
-			squarePart = Math.sqrt((4*Math.pow(a,2))/Math.pow(2*b - 2*l,2) - (4*(Math.pow(a,2)/(2*b - 2*l) + Math.pow(b,2)/(2*b - 2*l) -Math.pow(l,2)/(2*b - 2*l)))/(2*b - 2*l));
-			posX = (1/2)*(2*b - 2*l)*((2*a)/(2*b - 2*l) + squarePart);
-			negX = (1/2)*(2*b - 2*l)*((2*a)/(2*b - 2*l) - squarePart);
-
-			return [negX, posX];
-		}
-		Site.prototype.getMidY = function (line)
-		{
-			if(this.y == line)
-			line = nextFloat(line);
-			a = this.x;
-			b = this.y;
-			x = a;
-			l = line;
-
-			return (1/(2*(b-l)))*(Math.pow(x,2)-2*a*x+Math.pow(a,2)+Math.pow(b,2)-Math.pow(l,2));
-		}
-		Site.prototype.getY = function (line, x)
-		{
-			if(this.y == line)
-			line = nextFloat(line);
-			a = this.x;
-			b = this.y;
-			l = line;
-
-			return (1/(2*(b-l)))*(Math.pow(x,2)-2*a*x+Math.pow(a,2)+Math.pow(b,2)-Math.pow(l,2));
-		}
-
-		function findArchIntersect(leftSite, rightSite, line, log)
-		{
-			if(log) console.log("arch intersecet param ", leftSite, rightSite, line)
-			if(leftSite.y == line || rightSite.y == line)
-			{
-				if(log) console.log("line on site. Increment");
-				line = nextFloat(line);
-			}
-			if(line < leftSite.y || line < rightSite.y)
-			{
-				console.error("Line is smaller than both sites!");
-				line = nextFloat((rightSite.y>leftSite.y? rightSite.y:leftSite.y));
-			}
-			let a = leftSite.x;
-			let b = leftSite.y;
-			let c = rightSite.x;
-			let d = rightSite.y;
-			let l = line;
-
-			if(b == d)
-			{
-				console.log("B and D same.")
-				d = nextFloat(d);
-			}
-
-			if(log) console.log(a,b,c,d,l);
-			let squarePart = Math.sqrt(Math.pow((2*c)/(2*d - 2*l) - (2*a)/(2*b - 2*l), 2) - 4*(1/(2*b - 2*l) - 1/(2*d - 2*l)) * (Math.pow(a,2)/(2*b - 2*l) + Math.pow(b,2)/(2*b - 2*l) - Math.pow(l, 2)/(2*b - 2*l) - Math.pow(c, 2)/(2*d - 2*l) - Math.pow(d, 2)/(2*d - 2*l) + Math.pow(l, 2)/(2*d - 2*l)));
-			let posX = (squarePart + (2*a)/(2*b - 2*l) - (2*c)/(2*d - 2*l))/(2*(1/(2*b - 2*l) - 1/(2*d - 2*l)));
-			let negX = (-squarePart + (2*a)/(2*b - 2*l) - (2*c)/(2*d - 2*l))/(2*(1/(2*b - 2*l) - 1/(2*d - 2*l)));
-			if(log) console.log(squarePart, posX, negX);
-			return[negX, posX];
-			// Wolfram code
-			// Solve[(a^2 + b^2 - l^2 - 2 a x + x^2)/(2 b - 2 l) == (c^2 + d^2 - l^2 - 2 c x + x^2)/(2 d - 2 l), x]
-
-		}
-
-		function findLine(leftSite, rightSite)
-		{
-			let bigY = (leftSite.y > rightSite.y? leftSite.y : rightSite.y);
-			p1X = findArchIntersect(leftSite, rightSite, bigY+1)[myIntersect];
-			p2X = findArchIntersect(leftSite, rightSite, bigY+2)[myIntersect];
-
-			p1Y = leftSite.getY(bigY+1, p1X);
-			p2Y = leftSite.getY(bigY+2, p2X);
-
-			if(p2X == p1X)
-			{
-				throw "Vertical line. Undefined!"
-			}
-
-			slope = (p2Y-p1Y)/(p2X-p1X);
-			offset = p1Y - slope*p1X;
-
-			return new Line(offset, slope);
-		}
-
-		function findLineIntersect(leftSite, midSite, rightSite, log = false)
-		{
-			tryLog = function() {if(log) console.log.apply(console, arguments)}
-			tryLog("ID's %d %d %d", leftSite.siteID, midSite.siteID, rightSite.siteID);
-			tryLog("(%f, %f) (%f, %f) (%f, %f)", leftSite.x, leftSite.y, midSite.x, midSite.y, rightSite.x, rightSite.y)
-
-			let v1 = [midSite.x - leftSite.x, midSite.y - leftSite.y];
-			let v2 = [rightSite.x - midSite.x, rightSite.y - midSite.y];
-
-			if((rightSite.x == midSite.x) && rightSite.y == midSite.y)
-			console.log("the same!");
-			else tryLog("not same");
-
-			tryLog("v1 (%f, %f) v2 (%f, %f)", v1[0], v1[1], v2[0], v2[1]);
-
-			det = v1[0]*v2[1] - v1[1]*v2[0];
-
-			if(det <= 0)
-			{
-				tryLog("Cross is zero or less. Points are on a line or diverging")
-				return null; //Not right turn, not converging
-			}
-
-			leftLine = findLine(leftSite, midSite);
-			rightLine = findLine(midSite, rightSite);
-
-			meetingX = (rightLine.offset - leftLine.offset)/(leftLine.slope - rightLine.slope);
-			meetingY = leftLine.getY(meetingX);
-
-			return [meetingX, meetingY];
-		}
-
-		function detectCircleEvent(leftArch, midArch, rightArch, log = false)
-		{
-			let meeting = findLineIntersect(leftArch.site, midArch.site, rightArch.site, log);
-			if (meeting != null)
-			{
-				let pointToEvent = [meeting[0]-midArch.site.x, meeting[1]-midArch.site.y];
-				let pteMag = Math.sqrt(Math.pow(pointToEvent[0],2)+Math.pow(pointToEvent[1],2));
-				let event = new CircleEvent(meeting[0], meeting[1]+pteMag, meeting[1], midArch);
-				return event;
-			}
-			else return null;
-		}
-
-		function splitArch(oldArch, newSite, farRightBP, tree)
-		{
-			let log = false;
-			let tryLog = function(text)
-			{
-				if(log)
-				console.log(text);
-			}
-
-			if(oldArch.circleEvent != null)
-			{
-				oldArch.circleEvent.falseAlarm = true;
-				oldArch.circleEvent = null;
-			}
-			let e1 = new Edge(null, null);
-			let e2 = new Edge(null, e1);
-			e1.twin = e2;
-
-			let leftArch = oldArch;
-			let midArch = new Arch(newSite, tree);
-			let rightArch = new Arch(oldArch.site, tree);
-			if(farRightBP)
-			farRightBP.tuple[0] = rightArch;
-
-			rightArch.before = midArch;
-			rightArch.after = leftArch.after;
-			if(rightArch.after != null)
-			rightArch.after.before = rightArch;
-
-			midArch.before = leftArch;
-			midArch.after = rightArch;
-
-			leftArch.after = midArch;
-
-			//detect circleEvent
-			let farLeftArch = leftArch.before;
-			let farRightArch = rightArch.after;
-
-			if(farLeftArch != null)
-			{
-				let event = detectCircleEvent(farLeftArch, leftArch, midArch, log);
-				if(event != null)
-				{
-					leftArch.circleEvent = event;
-					tree.queue.queue(event);
-					tryLog("Left circle on add");
-				}
-				else tryLog("No left circle")
-			} else tryLog("No farLeft");
-			if(farRightArch != null)
-			{
-				let event = detectCircleEvent(midArch, rightArch, farRightArch, log);
-				if(event != null)
-				{
-					rightArch.circleEvent = event;
-					tree.queue.queue(event);
-					tryLog("right circle on add");
-				}
-				else tryLog("No right circle")
-			} else tryLog("No far right");
-
-			leftBP = new Breakpoint(leftArch, midArch, leftArch, null, false, e2, tree);
-			rightBP = new Breakpoint(midArch, rightArch, midArch, rightArch, true, e1, tree);
-			leftBP.rightChild = rightBP;
-			leftBP.rightHeight = 2;
-
-			return leftBP;
-		}
-
-		Edge.prototype.getX = function(y)
-		{
-			let dX = this.twin.origin.x - this.origin.x;
-			let dY = this.twin.origin.y - this.origin.y;
-			if(dX == 0) return this.origin.x; //Vertical line
-			let k = dY/dX;
-			//if (k == 0) throw "Horizontal line. Not supported atm"
-			let m = this.origin.y - k * this.origin.x;
-			return (y-m)/k;
-		}
-		Edge.prototype.intersect = function(otherEdge)
-		{
-			if(otherEdge == null)
-				return null;
-
-			let a = this.origin.x;
-			let b = this.origin.y;
-			let c = this.twin.origin.x;
-			let d = this.twin.origin.y;
-
-			let p = otherEdge.origin.x;
-			let q = otherEdge.origin.y;
-			let r = otherEdge.twin.origin.x;
-			let s = otherEdge.twin.origin.y;
-
-			var det, gamma, lambda;
-			det = (c - a) * (s - q) - (r - p) * (d - b);
-			if (det === 0) {
-				return null;
-			} else {
-				lambda = ((s - q) * (r - a) + (p - r) * (s - b)) / det;
-				gamma = ((b - d) * (r - a) + (c - a) * (s - b)) / det;
-				if ((0 < lambda && lambda < 1) && (0 < gamma && gamma < 1))
-				{
-					let x = a + lambda*(c-a);
-					let y = b + lambda*(d-b);
-					return [x,y];
-				}
-				return null;
-			}
-
-		}
-		Edge.prototype.draw = function(ctx, xCorr, yCorr, col)
-		{
-			if(this.origin && this.twin.origin)
-			{
-				ctx.strokeStyle = col;
-				ctx.beginPath();
-				ctx.moveTo(xCorr(edge.origin.x), yCorr(edge.origin.y));
-				ctx.lineTo(xCorr(edge.twin.origin.x), yCorr(edge.twin.origin.y));
-				ctx.stroke();
-			}
-		}
-
-		IntersectLeaf.prototype.split = function(edge, group)
-		{
-			let newLeaf = new IntersectLeaf(edge, group, this.tree, this.tree.leafID++);
-			//console.log("Created %d", newLeaf.ID);
-			let leftLeaf = null;
-			let midLeaf = newLeaf;
-			let rightLeaf = null;
-			let newNode = null;
-			let sameOriginNewRight = false;
-			let sameOrigin = edge.origin == this.edge.origin;
-			if(sameOrigin)
-			{
-				//console.log("Same origin")
-				let newXSlope = (edge.twin.origin.x - edge.origin.x) / (edge.twin.origin.y - edge.origin.y);
-				let oldXSlope = (this.edge.twin.origin.x - this.edge.origin.x) / (this.edge.twin.origin.y - this.edge.origin.y);
-				sameOriginNewRight = newXSlope > oldXSlope;
-				//console.log("newXSlope %f oldXSlope %f. New on right? %s", newXSlope, oldXSlope, sameOriginNewRight);
-			}
-
-			if(((edge.origin.x > this.edge.getX(edge.origin.y)) && !sameOrigin) || sameOriginNewRight)
-			{
-				//console.log("New on right");
-				leftLeaf = this;
-				midLeaf.after = leftLeaf.after;
-				midLeaf.before = leftLeaf;
-				leftLeaf.after = midLeaf;
-				rightLeaf = midLeaf.after;
-				if(rightLeaf) rightLeaf.before = midLeaf;
-				newNode = new IntersectNode(leftLeaf, midLeaf, this.tree, this.tree.nodeID++, this.parent);
-				midLeaf.parent = newNode;
-				leftLeaf.parent = newNode;
-			}
-			else
-			{
-				//console.log("New on left");
-				rightLeaf = this;
-				midLeaf.before = rightLeaf.before;
-				midLeaf.after = rightLeaf;
-				rightLeaf.before = midLeaf;
-				leftLeaf = midLeaf.before;
-				if(leftLeaf) leftLeaf.after = midLeaf;
-				newNode = new IntersectNode(midLeaf, rightLeaf, this.tree, this.tree.nodeID++, this.parent);
-				midLeaf.parent = newNode;
-				rightLeaf.parent = newNode;
-			}
-
-			let leftIntersection = (leftLeaf ? midLeaf.edge.intersect(leftLeaf.edge) : null);
-			let rightIntersection = (rightLeaf ? midLeaf.edge.intersect(rightLeaf.edge) : null);
-
-			if(leftIntersection)
-			{
-				//console.log("left intersect involving %d and %d", leftLeaf.ID, midLeaf.ID);
-				let event = new IntersectEvent(leftIntersection[0], leftIntersection[1], leftLeaf, midLeaf);
-				this.tree.queue.queue(event);
-			}
-			if(rightIntersection)
-			{
-				//console.log("right intersect involving %d and %d", midLeaf.ID, rightLeaf.ID);
-				let event = new IntersectEvent(rightIntersection[0], rightIntersection[1], midLeaf, rightLeaf);
-				this.tree.queue.queue(event);
-			}
-			return newNode;
-		}
-		IntersectLeaf.prototype.print = function(start, end, height, y)
-		{
-			c2.fillStyle = "#0000FF";
-			c2.font = "12px Arial";
-			c2.textAlign = "center"
-			let mid = start + (end-start)/2;
-			c2.fillText(this.ID, mid, height);
-			c2.fillStyle = "#00BB00";
-			c2.fillText(this.edge.getX(y).toFixed(2), mid, height+15);
-			c2.fillStyle = "#000000";
-			c2.fillText((this.before ? this.before.ID : "null") + " | " + (this.after ? this.after.ID : "null"), mid, height+30);
-
-		}
-		IntersectLeaf.prototype.getBiggestHeight = function()
-		{
-			return 0;
-		}
-		IntersectLeaf.prototype.draw = function(xCorr, yCorr)
-		{
-			let dx = this.edge.twin.origin.x - this.edge.origin.x;
-			let dy = this.edge.twin.origin.y - this.edge.origin.y;
-			c1.fillStyle = "#000000"
-			c1.font = "12px Arial";
-			c1.fillText(this.ID, xCorr(this.edge.origin.x + dx/2), yCorr(this.edge.origin.y + dy/2));
-		}
-
-		IntersectNode.prototype.getBiggestHeight = function()
-		{
-			return (this.rightHeight > this.leftHeight ? this.rightHeight : this.leftHeight);
-		}
-		IntersectNode.prototype.removeEdge = function(edge)
-		{
-			//console.log("Searching remove through %d", this.ID);
-			if((this.leftChild instanceof IntersectLeaf) && (this.leftChild.edge.twin.origin == edge.twin.origin))
-			{
-				//console.log("found in left child ID %d", this.leftChild.ID);
-				this.leftChild.removed = true;
-				let left = this.leftChild.before;
-				let right = this.leftChild.after;
-				if(left) left.after = right;
-				if(right)right.before = left;
-				if(left && right)
-				{
-					let intersect = right.edge.intersect(left.edge);
-					if(intersect)
-					{
-						//console.log("New intersect")
-						this.tree.queue.queue(new IntersectEvent(intersect[0], intersect[1], left, right));
-					}
-				}
-				return this.rightChild;
-			}
-			else if ((this.rightChild instanceof IntersectLeaf) && (this.rightChild.edge.twin.origin == edge.twin.origin))
-			{
-				//console.log("found in right child, ID %d", this.rightChild.ID);
-				this.rightChild.removed = true;
-				let left = this.rightChild.before;
-				let right = this.rightChild.after;
-				if(left) left.after = right;
-				if(right)right.before = left;
-				if((left != null) && (right != null))
-				{
-					//console.log(left, right);
-					let intersect = right.edge.intersect(left.edge);
-					if(intersect)
-					{
-						//console.log("New intersect")
-						this.tree.queue.queue(new IntersectEvent(intersect[0], intersect[1], left, right));
-					}
-				}
-				return this.leftChild;
-			}
-			else
-			{
-				if((this.rightInLeft.edge.twin.origin == edge.twin.origin) || (this.rightInLeft.edge.getX(edge.twin.origin.y) > edge.twin.origin.x))
-				{
-					let res = this.leftChild.removeEdge(edge);
-					if(res)
-					{
-						//console.log("replacing leftChild in %d after remove", this.ID);
-						//console.log(res);
-						this.leftChild = res;
-						this.leftChild.parent = this;
-						let leftRightest = this.leftChild;
-						while(!(leftRightest instanceof IntersectLeaf))
-							leftRightest = leftRightest.rightChild;
-						this.rightInLeft = leftRightest;
-					}
-					this.leftHeight = this.leftChild.getBiggestHeight()+1;
-					return null;
-				}
-				else
-				{
-					let res = this.rightChild.removeEdge(edge);
-					if(res)
-					{
-						//console.log("replacing rightChild in %d after remove", this.ID);
-						this.rightChild = res;
-						this.rightChild.parent = this;
-						let rightest = res;
-						while(!(rightest instanceof IntersectLeaf))
-							rightest = rightest.rightChild;
-						propogateRightInLeft(rightest);
-					}
-					this.rightHeight = this.rightChild.getBiggestHeight()+1;
-					return null;
-				}
-			}
-		}
-		IntersectNode.prototype.addEdge = function(edge, group)
-		{
-			let sharedOrigin = edge.origin == this.rightInLeft.edge.origin;
-			//console.log("%s shared origin at %d", (sharedOrigin ? "has" : "not"), this.ID);
-			let goingRight = (!(sharedOrigin)) && (edge.origin.x > this.rightInLeft.edge.getX(edge.origin.y));
-			let child = (goingRight ? this.rightChild : this.leftChild);
-			let rightMost = null;
-			if(child instanceof IntersectLeaf)
-			{
-				let newNode = child.split(edge, group);
-				if (goingRight)
-				{
-					this.rightChild = newNode;
-					this.rightHeight = 2;
-					return newNode.rightChild;
-				}
-				else
-				{
-					this.leftChild = newNode;
-					this.leftHeight = 2;
-					this.rightInLeft = newNode.rightChild;
-					return null;
-				}
-			}
-			else
-			{
-				let res = child.addEdge(edge, group);
-				if(goingRight)
-				{
-					this.rightHeight = this.rightChild.getBiggestHeight()+1;
-					return res;
-				}
-				else
-				{
-					this.leftHeight = this.leftChild.getBiggestHeight()+1;
-					if(res != null)
-						this.rightInLeft = res
-					return null;
-				}
-			}
-		}
-		IntersectNode.prototype.print = function(start, end, height, y)
-		{
-			let stdHeightDiff = 50;
-			let level = height;
-			let fontSize = 12;
-			let rowSize = fontSize + 3;
-			let topToBotArr = 45;
-			c2.fillStyle = "#FF0000";
-			c2.font = fontSize+"px Arial";
-			c2.textAlign = "center"
-			let mid = start + (end-start)/2;
-			c2.fillText(this.ID, mid, level);
-			level+= rowSize;
-			c2.fillStyle = "#0000FF";
-			c2.fillText(this.rightInLeft.ID, mid, level);
-			level+= rowSize;
-			c2.fillStyle = "#000000";
-			c2.fillText(this.leftHeight + " h " + this.rightHeight, mid, level);
-			level+= rowSize;
-			c2.fillStyle = "#00FF00";
-			c2.fillText(this.rightInLeft.edge.getX(y).toFixed(10), mid, level);
-			level+= 3;
-			let ratio = this.leftHeight/(this.leftHeight+this.rightHeight);
-			//let ratio = 0.5;
-			let leftPartition = (end-start) * ratio;
-
-			c2.strokeStyle = "#000000";
-			c2.beginPath();
-			c2.moveTo(mid, level);
-			c2.lineTo(start + (leftPartition)/2, level+stdHeightDiff-rowSize);
-			c2.stroke();
-
-			c2.beginPath();
-			c2.moveTo(mid, level);
-			c2.lineTo(start+leftPartition + (end-(start+leftPartition))/2, level+stdHeightDiff-rowSize);
-			c2.stroke();
-
-			this.leftChild.print(start, start+leftPartition, level+stdHeightDiff, y);
-			this.rightChild.print(start+leftPartition, end, level+stdHeightDiff, y);
-
-		}
-		IntersectNode.prototype.draw = function(xCorr, yCorr)
-		{
-			this.rightChild.draw(xCorr, yCorr);
-			this.leftChild.draw(xCorr, yCorr);
-		}
-
-		function propogateRightInLeft(leaf)
-		{
-			let curr = leaf.parent;
-			let child = leaf;
-			while(curr)
-			{
-				if(curr.rightChild == child)
-				{
-					child = curr;
-					curr = curr.parent;
-				}
-				else
-				{
-					curr.rightInLeft = leaf;
-					break;
-				}
-			}
-		}
-		function propogateHeight(leaf)
-		{
-			let curr = leaf.parent;
-			let child = leaf;
-			while(curr)
-			{
-				if(curr.rightChild == child)
-					curr.rightHeight = child.getBiggestHeight()+1;
-				else
-					curr.leftHeight = child.getBiggestHeight()+1;
-				child = curr;
-				curr = curr.parent;
-			}
-		}
-		function cutEdge(cutLeaf)
-		{
-			//console.log("Cutting %d", cutLeaf.ID);
-			let other;
-			let pa = cutLeaf.parent;
-			let onRightSide = pa.rightChild == cutLeaf;
-			let gran = pa.parent;
-			if(onRightSide)
-				other = pa.leftChild;
-			else other = pa.rightChild;
-
-			if(gran.rightChild == pa)
-			gran.rightChild = other;
-			else gran.leftChild = other;
-			other.parent = gran;
-
-			if(onRightSide)
-			{
-				let otherRight = other;
-				while(!(otherRight instanceof IntersectLeaf))
-					otherRight = otherRight.rightChild;
-
-				propogateRightInLeft(otherRight);
-			}
-			propogateHeight(other);
-			let left = cutLeaf.before;
-			let right = cutLeaf.after;
-			if(left != null)
-			{
-				//console.log("left ", left);
-				left.after = right;
-			}
-			if(right != null)
-			{
-				//console.log("right", right);
-				right.before = left;
-			}
-			cutLeaf.removed = true;
-			if(left && right)
-			{
-				let intersect = right.edge.intersect(left.edge);
-				if(intersect)
-				{
-					//console.log("New intersect after cut")
-					right.tree.queue.queue(new IntersectEvent(intersect[0], intersect[1], left, right));
-				}
-			}
-
-			let v1 = cutLeaf.edge.origin;
-			let v2 = cutLeaf.edge.twin.origin;
-			v1.edge = cutLeaf.edge.twin.next;
-			v2.edge = cutLeaf.edge.next;
-
-			cutLeaf.edge.prev.next = cutLeaf.edge.twin.next;
-			cutLeaf.edge.next.prev = cutLeaf.edge.twin.prev;
-
-			cutLeaf.edge.twin.prev.next = cutLeaf.edge.next;
-			cutLeaf.edge.twin.next.prev = cutLeaf.edge.prev;
-
-			cutLeaf.edge.origin = null;
-			cutLeaf.edge.twin.origin = null;
-
-		}
-		IntersectTree.prototype.processVertex = function(vertexEvent, step)
-		{
-			let removeEdges = [];
-			let addEdges = [];
-			let vert = vertexEvent.vertex;
-			let currEdge = vert.edge;
-			if(!currEdge) return;
-			let first = true;
-			while(currEdge != vert.edge || first)
-			{
-				first = false;
-				let otherVert = currEdge.twin.origin;
-				if((otherVert.y < vert.y) || ((otherVert.y == vert.y) && (otherVert.x < vert.y)))
-				{
-					//remove
-					removeEdges.push(currEdge.twin); //The twin is pointing down.
-				}
-				else if((otherVert.y > vert.y) || ((otherVert.y == vert.y) && (otherVert.x > vert.y)))
-				{
-					//add
-					addEdges.push(currEdge); //Current is pointing down.
-				}
-				else console.error("Duplicate vertecies")
-				currEdge = currEdge.twin.next;
-				if(currEdge == null)
-					break;
-			}
-			for(remove of removeEdges)
-			{
-				if(this.root == null)
-				{
-					throw "Tried to remove edge from empty tree"
-				}
-				else if(this.root instanceof IntersectLeaf)
-				{
-					if(this.root.edge == remove)
-					{
-						this.root = null;
-						//console.log("Found remove in root");
-					}
-					else
-						throw "Could not find edge for removal"
-				}
-				else
-				{
-					let res = this.root.removeEdge(remove);
-					if(res) this.root = res;
-				}
-				if(step)
-				{
-					//console.log("reprint")
-					this.print(vertexEvent.y);
-				}
-			}
-			for(add of addEdges)
-			{
-				if(this.root == null)
-				{
-					this.root = new IntersectLeaf(add, vertexEvent.group, this, this.leafID++);
-					//console.log("Created %d", this.root.ID);
-				}
-				else if(this.root instanceof IntersectLeaf)
-				{
-					this.root = this.root.split(add, vertexEvent.group);
-				}
-				else
-				{
-					this.root.addEdge(add, vertexEvent.group);
-				}
-				if(step)
-				{
-					//console.log("reprint")
-					this.print(vertexEvent.y);
-				}
-
-			}
-
-		}
-		IntersectTree.prototype.processIntersect = function(intersectEvent)
-		{
-			if((this.root == null) || (this.root instanceof IntersectLeaf))
-			{
-				throw "Intresect on empty or leaf tree"
-			}
-			let left = intersectEvent.leftLeaf;
-			let right = intersectEvent.rightLeaf;
-			if(left.removed || right.removed)
-			{
-				//console.log("Already removed");
-				return;
-			}
-			if((left.before == right) && (right.after == left))
-			{
-				//console.log("Swap already in place")
-				return;
-			}
-
-			if(left.group != right.group)
-			{
-				if(left.group < right.group)
-					cutEdge(right);
-				else cutEdge(left);
-
-			}
-			else
-			{
-
-				let farLeft = left.before;
-				let farRight = right.after;
-
-				right.before = farLeft;
-				left.after = farRight;
-				right.after = left;
-				left.before = right;
-
-				let lpRight = left.parent.rightChild == left;
-				let rpRight = right.parent.rightChild == right;
-
-				if(lpRight) left.parent.rightChild = right
-				else left.parent.leftChild = right;
-
-				if(rpRight) right.parent.rightChild = left;
-				else right.parent.rightChild = left;
-
-				propogateRightInLeft(left);
-				propogateRightInLeft(right);
-				propogateHeight(left);
-				propogateHeight(right);
-				console.error("Check new interections!");
-			}
-		}
-		IntersectTree.prototype.print = function(y)
-		{
-			clearCanvas(c2);
-			if(this.root)
-			{
-				this.root.print(0, c2.canvas.clientWidth, 50, y);
-			}
-		}
-		IntersectTree.prototype.draw = function(xCorr, yCorr)
-		{
-			if(this.root)
-			this.root.draw(xCorr, yCorr);
-		}
-
-		function makeMapper(a, b, c, d)
+		function makeMapper(a, b, c, d) //None
 		{
 			if(a == b)
 			throw "Zero distance map between " + a + " and " + b
@@ -1458,7 +101,7 @@
 			}
 		}
 
-		function makeCoordCorrecter(coef, buff, offset)
+		function makeCoordCorrecter(coef, buff, offset) //Lin, Vor, Over
 		{
 			return function(coord)
 			{
@@ -1466,30 +109,30 @@
 			}
 		}
 
-		function properSites()
+		function properSites() //Over
 		{
 			let vertFaces = getVertsFaces();
-			sites = [];
-			verts = vertFaces[0];
-			for(face of vertFaces[1])
+			let sites = [];
+			let verts = vertFaces[0];
+			for(let face of vertFaces[1])
 			{
 				if(face.length == 2)
 				{
-					x1 = parseFloat(verts[face[0]][0]);
-					y1 = parseFloat(verts[face[0]][1]);
-					x2 = parseFloat(verts[face[1]][0]);
-					y2 = parseFloat(verts[face[1]][1]);
-					sites.push(new Site(x1, y1));
-					sites.push(new Site(x2, y2));
+					let x1 = parseFloat(verts[face[0]][0]);
+					let y1 = parseFloat(verts[face[0]][1]);
+					let x2 = parseFloat(verts[face[1]][0]);
+					let y2 = parseFloat(verts[face[1]][1]);
+					sites.push(new vor.Site(x1, y1));
+					sites.push(new vor.Site(x2, y2));
 				}
 			}
 
 			var queue = new PriorityQueue({ initialValues: sites, comparator: compareEvents });
-			cleanSites = [];
-			lastSite = queue.dequeue();
+			let cleanSites = [];
+			let lastSite = queue.dequeue();
 			while(queue.length > 0)
 			{
-				site = queue.dequeue();
+				let site = queue.dequeue();
 				if(site.y == lastSite.y && site.x == lastSite.x)
 				{
 					//discard
@@ -1503,7 +146,7 @@
 			return cleanSites;
 		}
 
-		function getMinMax()
+		function getMinMax() //Over
 		{
 			let json;
 			try{
@@ -1518,15 +161,15 @@
 				}
 				return;
 			}
-			minX = json.boundingBox.min[0];
-			minY = json.boundingBox.min[1];
-			maxX = json.boundingBox.max[0];
-			maxY = json.boundingBox.max[1];
+			var minX = json.boundingBox.min[0];
+			var minY = json.boundingBox.min[1];
+			var maxX = json.boundingBox.max[0];
+			var maxY = json.boundingBox.max[1];
 
 			return [[minX, maxX], [minY, maxY]];
 		}
 
-		function realArguments(draw, step)
+		function realArguments(draw, step) //Over
 		{
 			let minmax = getMinMax();
 			let minX = minmax[0][0];
@@ -1535,272 +178,26 @@
 			let maxY = minmax[1][1];
 
 			let sites = properSites();
-			// let xMapper = makeMapper(minX-1, maxX+1, 0, maxX * 10);
-			// let yMapper = makeMapper(minY-1, maxY+1, 0, maxY * 10);
-			// bigSites = sites.map(s => new Site(xMapper(s.x), yMapper(s.y)));
 
-			heightCoef = (canvas.height / (maxY-minY)) * 0.95;
-			widthCoef = (canvas.width / (maxX-minX)) * 0.95;
-			heightBuff = canvas.height * 0.025;
-			widthBuff = canvas.width * 0.025;
+			let heightCoef = (canvas.height / (maxY-minY)) * 0.95;
+			let widthCoef = (canvas.width / (maxX-minX)) * 0.95;
+			let heightBuff = canvas.height * 0.025;
+			let widthBuff = canvas.width * 0.025;
 
 			//heightCoef = (canvas.height / (maxY * 10)) * 0.95;
 			//widthCoef = (canvas.width / (maxX * 10)) * 0.95;
 
 			//return [[bigSites], [makeCoordCorrecter(widthCoef, widthBuff, 0), makeCoordCorrecter(heightCoef, heightBuff, 0), 0, maxY*10]];
-			return [sites, draw, step, makeCoordCorrecter(widthCoef, widthBuff, minX), makeCoordCorrecter(heightCoef, heightBuff, minY), minY, maxY];
+			return [sites, draw, step, makeCoordCorrecter(widthCoef, widthBuff, minX), makeCoordCorrecter(heightCoef, heightBuff, minY), minY, maxY, c1, c2];
 		}
 
-		function voronoi(sites, draw, step, xCorr, yCorr, minY, maxY)
+		$("#Vor").click(function() //Over
 		{
-			var queue = new PriorityQueue({ initialValues: sites, comparator: compareEvents });
-			let start = null;
-			let tree = new BeachTree(queue);
-			let totTime = 10000;
-			let line = minY;
-			let siteID = 1;
-
-			let firstEvent = queue.dequeue();
-			if(firstEvent.y == queue.peek().y)
-				firstEvent.y = prevFloat(firstEvent.y);
-			queue.queue(firstEvent);
-
-			newDraw = function (timestep)
-			{
-				if(!start)
-				{
-					start = timestep;
-					}
-				let shouldStep = true;
-				while(queue.length > 0 && ((queue.peek().y <= line && !step) || (step && shouldStep)))
-				{
-					let event = queue.dequeue();
-					if(step)
-					{
-						line = event.y;
-					}
-					if(event instanceof Site)
-					{
-						event.siteID = siteID++;
-						tree.addSite(event);
-
-						tree.print();
-					}
-					else if(!event.falseAlarm)
-					{
-						tree.processCircle(event);
-
-						tree.print();
-					}
-					else
-					{
-						continue;
-					}
-					shouldStep = false;
-				}
-				if(step && shouldStep)
-				{
-					line = maxY
-				}
-
-				clearCanvas(c1);
-				for(point of sites)
-				{
-					c1.fillStyle = "#000000";
-					c1.beginPath();
-					c1.arc(xCorr(point.x), yCorr(point.y), dotSize, 0, 2 * Math.PI, false);
-					c1.fill();
-				}
-
-				tree.draw(line, xCorr, yCorr, false);
-
-				c1.strokeStyle = "#ff0000";
-				c1.beginPath();
-				c1.moveTo(0, yCorr(line));
-				c1.lineTo(canvas.width, yCorr(line));
-				c1.stroke();
-
-				if(draw){
-					timeDiff = timestep - start;
-					line = minY + (maxY-minY) * (timeDiff/totTime)
-					if(timeDiff < totTime)
-					{
-						window.requestAnimationFrame(newDraw);
-					}
-					else if(queue.length > 0)
-					{
-						line = queue.peek().y;
-						window.requestAnimationFrame(newDraw);
-					}
-				}
-			};
-			if(draw)
-				window.requestAnimationFrame(newDraw);
-			else if(step)
-			{
-				newDraw();
-				return newDraw;
-			}
-			else
-			{
-				while(queue.length > 0)
-				{
-					let event = queue.dequeue();
-					if(event instanceof Site)
-						tree.addSite(event);
-					else if(!event.falseAlarm)
-					{
-						tree.processCircle(event);
-						vertices.push([event.x, event.eventY]);
-					}
-				}
-				let nullTwin = 0;
-				let nullSelf = 0;
-				let nullBoth = 0;
-				for (edge of tree.edges)
-				{
-					if(edge.origin == null)
-						nullSelf++;
-					if(edge.twin.origin == null)
-						nullTwin++;
-					if((edge.origin == null) && (edge.twin.origin == null))
-						nullBoth++;
-				}
-				tree.closeEdges();
-				return [tree.vertices, tree.edges];
-			}
-		}
-
-		function lineIntersect(primaryGroup, secondaryGroup, draw, step, xCorr, yCorr, minY, maxY)
-		{
-			var queue = new PriorityQueue({comparator: compareEvents });
-			let tree = new IntersectTree(queue);
-			let line = minY;
-			let totTime = 10000;
-			let start = null;
-			let timeDiff;
-			for(vert of primaryGroup[0])
-			{
-				queue.queue(new VertexEvent(vert, 1));
-			}
-			for(vert of secondaryGroup[0])
-			{
-				queue.queue(new VertexEvent(vert, 2));
-			}
-			let drawer = function(timestep)
-			{
-				if(draw)
-				{
-					if(!start) start = timestep;
-				}
-				clearCanvas(c1);
-
-				let shouldStep = true;
-				while(queue.length > 0 && ((queue.peek().y <= line && !step) || (step && shouldStep)))
-				{
-					event = queue.dequeue();
-					if(event instanceof VertexEvent)
-					{
-						tree.processVertex(event, step);
-					}
-					else
-					{
-						tree.processIntersect(event);
-					}
-					shouldStep = false;
-					if(step)
-					{
-						tree.draw(xCorr, yCorr);
-						c1.fillStyle = "#000000"
-						line = event.y;
-						c1.beginPath();
-						c1.arc(xCorr(event.x), yCorr(event.y), dotSize, 0, 2 * Math.PI, false);
-						c1.fill();
-
-					}
-					tree.print(event.y);
-				}
-
-				for(edge of primaryGroup[1])
-				{
-					edge.draw(c1, xCorr, yCorr, "#000000");
-				}
-				for(edge of secondaryGroup[1])
-				{
-					edge.draw(c1, xCorr, yCorr, "#FF0000");
-				}
-
-				c1.strokeStyle = "#000000";
-				c1.beginPath();
-				c1.moveTo(0, yCorr(line));
-				c1.lineTo(canvasWidth, yCorr(line));
-				c1.stroke();
-
-				tree.print(line);
-
-				if(draw)
-				{
-					timeDiff = timestep - start;
-					if((timeDiff < totTime))
-					{
-						line = minY + (maxY-minY) * (timeDiff/totTime)
-						window.requestAnimationFrame(drawer);
-					}
-					else if(queue.length > 0)
-					{
-						line = queue.peek().y;
-						window.requestAnimationFrame(drawer);
-					}
-					else
-						console.log("done");
-				}
-
-			}
-			if(draw)
-				window.requestAnimationFrame(drawer);
-			else if(step)
-			{
-				drawer();
-				return drawer;
-			}
-			else
-			{
-				while(queue.length > 0)
-				{
-					event = queue.dequeue();
-					if(event instanceof VertexEvent)
-					{
-						tree.processVertex(event, step);
-					}
-					else
-					{
-						tree.processIntersect(event);
-					}
-				}
-				//Cut edges still in set. Remove these.
-				let cleanEdges = [];
-				let cleanVertices = [];
-				for(edge of secondaryGroup[1])
-				{
-					if(edge.origin && edge.twin.origin)
-						cleanEdges.push(edge)
-				}
-				for(vert of secondaryGroup[0])
-				{
-					if(vert.edge)
-						cleanVertices.push(vert);
-				}
-				return [cleanVertices, cleanEdges];
-			}
-		}
-
-		$("#Vor").click(function()
-		{
-			voronoi.apply(this, realArguments(true, false));
+			vor.voronoi.apply(this, realArguments(true, false));
 		});
-		$("#VorStep").click(function()
+		$("#VorStep").click(function() //Over
 		{
-			func = voronoi.apply(this, realArguments(false, true));
+			let func = vor.voronoi.apply(this, realArguments(false, true));
 			$("#VorStep").off("click").click(func);
 
 			for(let i = 0; i < 0; i++)
@@ -1808,7 +205,7 @@
 				$("#VorStep").click();
 			}
 		});
-		$("#VorFast").click(function()
+		$("#VorFast").click(function() //Over
 		{
 			let minmax = getMinMax();
 			let minX = minmax[0][0];
@@ -1818,12 +215,12 @@
 
 			let sites = properSites();
 
-			res = voronoi(sites, false, false, null, null, null, null, null);
+			let res = vor.voronoi(sites, false, false, null, null, null, null, null, null, null);
 
-			heightCoef = (canvas.height / (maxY-minY)) * 0.95;
-			widthCoef = (canvas.width / (maxX-minX)) * 0.95;
-			heightBuff = canvas.height * 0.025;
-			widthBuff = canvas.width * 0.025;
+			let heightCoef = (canvas.height / (maxY-minY)) * 0.95;
+			let widthCoef = (canvas.width / (maxX-minX)) * 0.95;
+			let heightBuff = canvas.height * 0.025;
+			let widthBuff = canvas.width * 0.025;
 
 			let yCorr = makeCoordCorrecter(heightCoef, heightBuff, minY);
 			let xCorr = makeCoordCorrecter(widthCoef, widthBuff, minX);
@@ -1832,7 +229,7 @@
 			if(false)
 			{
 				c1.fillStyle = "#0000FF";
-				for(vert of res[0])
+				for(let vert of res[0])
 				{
 					c1.beginPath();
 					c1.arc(xCorr(vert.x), yCorr(vert.y), dotSize, 0, 2 * Math.PI, false);
@@ -1841,31 +238,21 @@
 			}
 			if(true)
 			{
-				for(edge of res[1])
+				for(let edge of res[1])
 				{
 					if(edge.twin.origin != null)
 					{
-						edge.draw(c1, xCorr, yCorr, "#FF0000");
+						edge.draw(xCorr, yCorr, "#FF0000", c1);
 					}
 				}
 			}
 			overlayMap();
 		});
 
-		function createEdge(v1, v2)
-		{
-			let e1 = new Edge(v1, null);
-			let e2 = new Edge(v2, e1);
-			e1.twin = e2;
-			v1.edge = e1;
-			v2.edge = e2;
-			return e1;
-		}
-
-		function realCuts(draw, step)
+		function realCuts(draw, step) //Over
 		{
 			let sites = properSites();
-			let vor = voronoi(sites, false, false, null, null, null, null, null);
+			let res = vor.voronoi(sites, false, false, null, null, null, null, null, null, null);
 			let map = getMapEdgeList();
 
 			if(draw || step)
@@ -1877,33 +264,31 @@
 				let maxY = minmax[1][1];
 
 
-				heightCoef = (canvas.height / (maxY-minY)) * 0.95;
-				widthCoef = (canvas.width / (maxX-minX)) * 0.95;
-				heightBuff = canvas.height * 0.025;
-				widthBuff = canvas.width * 0.025;
+				let heightCoef = (canvas.height / (maxY-minY)) * 0.95;
+				let widthCoef = (canvas.width / (maxX-minX)) * 0.95;
+				let heightBuff = canvas.height * 0.025;
+				let widthBuff = canvas.width * 0.025;
 
 				let xCorr = makeCoordCorrecter(widthCoef, widthBuff, minX);
 				let yCorr = makeCoordCorrecter(heightCoef, heightBuff, minY);
-				return [[map[0], map[1]], vor, draw, step, xCorr, yCorr, minY, maxY]
+				return [[map[0], map[1]], res, draw, step, xCorr, yCorr, minY, maxY, c1, c2]
 			}
-			else return [[map[0], map[1]], vor, draw, step, null, null, null, null]
+			else return [[map[0], map[1]], res, draw, step, null, null, null, null, null, null]
 		}
 
-		$("#Cut").click(function()
+		$("#Cut").click(function() // Over
 		{
-			//lineIntersect.apply(this, testCuts(true, false));
-
-			lineIntersect.apply(this, realCuts(true, false));
+			lin.lineIntersect.apply(this, realCuts(true, false));
 		});
 
-		$("#CutStep").click(function()
+		$("#CutStep").click(function() //Over
 		{
-			let res = lineIntersect.apply(this, realCuts(false, true));
+			let res = lin.lineIntersect.apply(this, realCuts(false, true));
 			$("#CutStep").off("click").click(res);
 		});
-		$("#CutFast").click(function()
+		$("#CutFast").click(function() //Over
 		{
-			let res = lineIntersect.apply(this, realCuts(false, false));
+			let res = lin.lineIntersect.apply(this, realCuts(false, false));
 
 			let minmax = getMinMax();
 			let minX = minmax[0][0];
@@ -1911,25 +296,25 @@
 			let minY = minmax[1][0];
 			let maxY = minmax[1][1];
 
-			heightCoef = (canvas.height / (maxY-minY)) * 0.95;
-			widthCoef = (canvas.width / (maxX-minX)) * 0.95;
-			heightBuff = canvas.height * 0.025;
-			widthBuff = canvas.width * 0.025;
+			let heightCoef = (canvas.height / (maxY-minY)) * 0.95;
+			let widthCoef = (canvas.width / (maxX-minX)) * 0.95;
+			let heightBuff = canvas.height * 0.025;
+			let widthBuff = canvas.width * 0.025;
 
 			let yCorr = makeCoordCorrecter(heightCoef, heightBuff, minY);
 			let xCorr = makeCoordCorrecter(widthCoef, widthBuff, minX);
 
 			clearCanvas(c1);
 
-			for(edge of res[1])
+			for(let edge of res[1])
 			{
-				edge.draw(c1, xCorr, yCorr, "#ff0000");
+				edge.draw(xCorr, yCorr, "#ff0000", c1);
 			}
 			overlayMap();
 		});
 
 
-		function drawArrows(edge, xCorr, yCorr)
+		function drawArrows(edge, xCorr, yCorr) //Over
 		{
 
 			let vX = edge.twin.origin.x - edge.origin.x;
@@ -1992,7 +377,7 @@
 		}
 
 
-		function vertexEdge(startID, startEdge, endID, endEdge)
+		function vertexEdge(startID, startEdge, endID, endEdge) //Over?
 		{
 			this.startID = startID;
 			this.startEdge = startEdge;
@@ -2000,7 +385,7 @@
 			this.endEdge = endEdge;
 		}
 
-		function vertexLine(startEdge, endEdge, ID)
+		function vertexLine(startEdge, endEdge, ID) //None??? Unused
 		{
 			this.startEdge = startEdge;
 			this.endEdge = endEdge;
@@ -2009,7 +394,7 @@
 			this.ID = ID;
 		}
 
-		function mergeLines(first, second)
+		function mergeLines(first, second) //Over
 		{
 			if(first.startEdge.startID == second.endEdge.endID)
 			{
@@ -2060,7 +445,7 @@
 			}
 		}
 
-		function drawLines()
+		function drawLines()//Over
 		{
 
 			clearCanvas(c2);
@@ -2089,7 +474,7 @@
 			}
 		}
 
-		function getVertsFaces()
+		function getVertsFaces() //Over
 		{
 			let json;
 			try{
@@ -2110,25 +495,25 @@
 				return;
 			}
 
-			dirtyFaces = json.faces.split(";");
-			cleanFaces = [];
-			for(df of dirtyFaces)
+			let dirtyFaces = json.faces.split(";");
+			let cleanFaces = [];
+			for(let df of dirtyFaces)
 			{
-				cleanUnsplitSuffix = df.split("@");
-				strFace = cleanUnsplitSuffix[0].split(",");
-				intFace = [];
-				for(str of strFace)
+				let cleanUnsplitSuffix = df.split("@");
+				let strFace = cleanUnsplitSuffix[0].split(",");
+				let intFace = [];
+				for(let str of strFace)
 					intFace.push(parseInt(str));
 				cleanFaces.push(intFace);
 			}
-			verticesGroup = json.vertices;
+			let verticesGroup = json.vertices;
 			verticesGroup = verticesGroup.split(";");
-			vertices = []
-			for (group of verticesGroup)
+			let vertices = []
+			for (let group of verticesGroup)
 			{
-				strVert = group.split(",");
-				floatVert = []
-				for (str of strVert)
+				let strVert = group.split(",");
+				let floatVert = []
+				for (let str of strVert)
 					floatVert.push(parseFloat(str));
 				vertices.push(floatVert);
 			}
@@ -2136,7 +521,7 @@
 			return [vertices, cleanFaces];
 		}
 
-		function overlayMap()
+		function overlayMap() //Over
 		{
 			let vertFaces = getVertsFaces();
 			let minmax = getMinMax();
@@ -2145,28 +530,28 @@
 			let minY = minmax[1][0];
 			let maxY = minmax[1][1];
 
-			heightCoef = (canvas.height / (maxY-minY)) * 0.95;
-			widthCoef = (canvas.width / (maxX-minX)) * 0.95;
-			heightBuff = canvas.height * 0.025;
-			widthBuff = canvas.width * 0.025;
+			let heightCoef = (canvas.height / (maxY-minY)) * 0.95;
+			let widthCoef = (canvas.width / (maxX-minX)) * 0.95;
+			let heightBuff = canvas.height * 0.025;
+			let widthBuff = canvas.width * 0.025;
 
 			let xCorr = makeCoordCorrecter(widthCoef, widthBuff, minX);
 			let yCorr = makeCoordCorrecter(heightCoef, heightBuff, minY);
 
-			vertices = vertFaces[0];
-			faces = vertFaces[1];
+			let vertices = vertFaces[0];
+			let faces = vertFaces[1];
 
 			c1.strokeStyle = "#000000";
 			c1.fillStyle = "#ffb33a";
 
-			for(face of faces)
+			for(let face of faces)
 			{
 				if (face.length == 2)
 				{
-					v1x = vertices[face[0]][0];
-					v1y = vertices[face[0]][1];
-					v2x = vertices[face[1]][0];
-					v2y = vertices[face[1]][1];
+					let v1x = vertices[face[0]][0];
+					let v1y = vertices[face[0]][1];
+					let v2x = vertices[face[1]][0];
+					let v2y = vertices[face[1]][1];
 
 					c1.beginPath();
 					c1.moveTo(xCorr(v1x), yCorr(v1y));
@@ -2176,12 +561,12 @@
 				else if (face.length == 3)
 				{
 					continue;
-					v1x = vertices[face[0]][0];
-					v1y = vertices[face[0]][1];
-					v2x = vertices[face[1]][0];
-					v2y = vertices[face[1]][1];
-					v3x = vertices[face[2]][0];
-					v3y = vertices[face[2]][1];
+					let v1x = vertices[face[0]][0];
+					let v1y = vertices[face[0]][1];
+					let v2x = vertices[face[1]][0];
+					let v2y = vertices[face[1]][1];
+					let v3x = vertices[face[2]][0];
+					let v3y = vertices[face[2]][1];
 
 
 					c1.beginPath();
@@ -2193,7 +578,7 @@
 			}
 		}
 
-		function getMapEdgeList()
+		function getMapEdgeList() //Over
 		{
 			let vertFaces = getVertsFaces();
 			let rawVerts = vertFaces[0];
@@ -2202,21 +587,21 @@
 			//Build up doubly connected edge list. Assume any vertice has at most two edges. (Forms a line, not a polygon or intersection)
 			let vertices = [];
 			let edges = [];
-			for (raw of rawVerts)
+			for (let raw of rawVerts)
 			{
-				vertices.push(new Vertex(raw[0], raw[1]));
+				vertices.push(new vor.Vertex(raw[0], raw[1]));
 			}
 
 			//Connecting edges to vertices.
-			for (face of faces)
+			for (let face of faces)
 			{
 				if (face.length !== 2) {continue};
 
 				let v1 = vertices[face[0]];
 				let v2 = vertices[face[1]];
 
-				let Ev1v2 = new Edge(v1, null);
-				let Ev2v1 = new Edge(v2, Ev1v2);
+				let Ev1v2 = new vor.Edge(v1, null);
+				let Ev2v1 = new vor.Edge(v2, Ev1v2);
 				Ev1v2.twin = Ev2v1;
 				edges.push(Ev1v2);
 				if(v1.edge == null)
@@ -2247,7 +632,7 @@
 			let endings = [];
 			let endingProcessed = [];
 			let pairs = [];
-			for (vertex of vertices)
+			for (let vertex of vertices)
 			{
 				if((vertex.edge != null) && (vertex.edge.twin.next == null))
 				{
@@ -2279,7 +664,7 @@
 				pairs.push([ending, otherEnd]);
 			}
 			//Clear duplicate internal
-			for(pair of pairs)
+			for(let pair of pairs)
 			{
 				let edge = pair[0].edge;
 				while(edge != null)
@@ -2302,9 +687,9 @@
 				}
 			}
 			//Verify chain
-			for(pair of pairs)
+			for(let pair of pairs)
 			{
-				for(comb of [[0,1],[1,0]])
+				for(let comb of [[0,1],[1,0]])
 				{
 					let start = pair[comb[0]];
 					let end = pair[comb[1]];
@@ -2325,12 +710,11 @@
 			}
 
 			//Clear duplicates endings
-			//console.log(pairs.length);
 			for(let i = 0; i < pairs.length; i++)
 			{
 				for(let j = i+1; j < pairs.length; j++)
 				{
-					for(comb of [[0,0],[0,1],[1,0],[1,1]])
+					for(let comb of [[0,0],[0,1],[1,0],[1,1]])
 					{
 						let end1 = pairs[i][comb[0]];
 						let end2 = pairs[j][comb[1]];
@@ -2338,8 +722,8 @@
 						{
 							//console.log("Duplicate endings x %f y %f", end1.x, end1.y);
 							//console.log("ends\n", end1, end2);
-							e1 = end1.edge;
-							e2 = end2.edge;
+							let e1 = end1.edge;
+							let e2 = end2.edge;
 
 							e1.prev = e2.twin;
 							e2.twin.next = e1;
@@ -2349,18 +733,15 @@
 
 							e2.origin = e1.origin;
 							end2.edge = null;
-							//console.log("original pairs\n[%o, %o]\n[%o, %o]", pairs[i][0], pairs[i][1], pairs[j][0], pairs[j][1]);
 							let secondOther = (comb[1] == 1 ? 0 : 1);
 							pairs[i][comb[0]] = pairs[j][secondOther];
 							pairs.splice(j, 1);
-							//console.log("new pair\n%o", pairs[i]);
 							j = i+1;
 							break;
 						}
 					}
 				}
 			}
-			//console.log(pairs.length);
 
 			return [vertices, edges, pairs];
 		}
