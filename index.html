@@ -45,8 +45,11 @@
 
 		//import pq from "./js-priority-queue/priority-queue.js";
 		//const { PriorityQueue } = pq;
-		import * as vor from "./voronoi.mjs";
-		import * as lin from "./lineIntersect.mjs";
+		import {voronoi} from "./voronoi/voronoi.mjs";
+		import {Site} from "./voronoi/site.mjs";
+		import {Vertex} from "./voronoi/vertex.mjs";
+		import {Edge} from "./voronoi/edge.mjs";
+		import {lineIntersect} from "./lineIntersect.mjs";
 
 		const canvasWidth = 1000;
 		const canvasHeight = 1000;
@@ -122,8 +125,8 @@
 					let y1 = parseFloat(verts[face[0]][1]);
 					let x2 = parseFloat(verts[face[1]][0]);
 					let y2 = parseFloat(verts[face[1]][1]);
-					sites.push(new vor.Site(x1, y1));
-					sites.push(new vor.Site(x2, y2));
+					sites.push(new Site(x1, y1));
+					sites.push(new Site(x2, y2));
 				}
 			}
 
@@ -193,11 +196,11 @@
 
 		$("#Vor").click(function() //Over
 		{
-			vor.voronoi.apply(this, realArguments(true, false));
+			voronoi.apply(this, realArguments(true, false));
 		});
 		$("#VorStep").click(function() //Over
 		{
-			let func = vor.voronoi.apply(this, realArguments(false, true));
+			let func = voronoi.apply(this, realArguments(false, true));
 			$("#VorStep").off("click").click(func);
 
 			for(let i = 0; i < 0; i++)
@@ -215,7 +218,7 @@
 
 			let sites = properSites();
 
-			let res = vor.voronoi(sites, false, false, null, null, null, null, null, null, null);
+			let res = voronoi(sites, false, false, null, null, null, null, null, null, null);
 
 			let heightCoef = (canvas.height / (maxY-minY)) * 0.95;
 			let widthCoef = (canvas.width / (maxX-minX)) * 0.95;
@@ -252,7 +255,7 @@
 		function realCuts(draw, step) //Over
 		{
 			let sites = properSites();
-			let res = vor.voronoi(sites, false, false, null, null, null, null, null, null, null);
+			let res = voronoi(sites, false, false, null, null, null, null, null, null, null);
 			let map = getMapEdgeList();
 
 			if(draw || step)
@@ -278,17 +281,17 @@
 
 		$("#Cut").click(function() // Over
 		{
-			lin.lineIntersect.apply(this, realCuts(true, false));
+			lineIntersect.apply(this, realCuts(true, false));
 		});
 
 		$("#CutStep").click(function() //Over
 		{
-			let res = lin.lineIntersect.apply(this, realCuts(false, true));
+			let res = lineIntersect.apply(this, realCuts(false, true));
 			$("#CutStep").off("click").click(res);
 		});
 		$("#CutFast").click(function() //Over
 		{
-			let res = lin.lineIntersect.apply(this, realCuts(false, false));
+			let res = lineIntersect.apply(this, realCuts(false, false));
 
 			let minmax = getMinMax();
 			let minX = minmax[0][0];
@@ -589,7 +592,7 @@
 			let edges = [];
 			for (let raw of rawVerts)
 			{
-				vertices.push(new vor.Vertex(raw[0], raw[1]));
+				vertices.push(new Vertex(raw[0], raw[1]));
 			}
 
 			//Connecting edges to vertices.
@@ -600,8 +603,8 @@
 				let v1 = vertices[face[0]];
 				let v2 = vertices[face[1]];
 
-				let Ev1v2 = new vor.Edge(v1, null);
-				let Ev2v1 = new vor.Edge(v2, Ev1v2);
+				let Ev1v2 = new Edge(v1, null);
+				let Ev2v1 = new Edge(v2, Ev1v2);
 				Ev1v2.twin = Ev2v1;
 				edges.push(Ev1v2);
 				if(v1.edge == null)
